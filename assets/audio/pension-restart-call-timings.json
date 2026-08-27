@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "source": "ElevenLabs Text to Dialogue with timestamps",
+  "model": "eleven_v3",
+  "seed": 1975,
+  "outputFormat": "mp3_44100_128",
+  "duration": 61.84,
+  "voices": {
+    "guide": {
+      "name": "Man",
+      "id": "5j3KBMZetWLloYDOXIdX"
+    },
+    "caller": {
+      "name": "Granny",
+      "id": "gMp85KKSj3ACCB5RGSw2"
+    }
+  },
+  "bubbles": [
+    {
+      "id": 1,
+      "dialogueInputIndex": 0,
+      "speaker": "guide",
+      "speakerName": "Pension guide",
+      "voiceName": "Man",
+      "voiceId": "5j3KBMZetWLloYDOXIdX",
+      "start": 0,
+      "end": 11.52,
+      "text": "Namaste. You have reached Pension Restart, an independent pension-guidance prototype. Please do not share an Aadhaar number, OTP, PIN or bank password. Which language would you prefer?"
+    },
+    {
+      "id": 2,
+      "dialogueInputIndex": 1,
+      "speaker": "caller",
+      "speakerName": "Kamla Devi",
+      "voiceName": "Granny",
+      "voiceId": "gMp85KKSj3ACCB5RGSw2",
+      "start": 11.52,
+      "end": 12.48,
+      "text": "Hindi."
+    },
+    {
+      "id": 3,
+      "dialogueInputIndex": 2,
+      "speaker": "guide",
+      "speakerName": "Pension guide",
+      "voiceName": "Man",
+      "voiceId": "5j3KBMZetWLloYDOXIdX",
+      "start": 12.48,
+      "end": 16.24,
+      "text": "Theek hai. Aap batayiye, pension ke saath kya dikkat aa rahi hai?"
+    },
+    {
+      "id": 4,
+      "dialogueInputIndex": 3,
+      "speaker": "caller",
+      "speakerName": "Kamla Devi",
+      "voiceName": "Granny",
+      "voiceId": "gMp85KKSj3ACCB5RGSw2",
+      "start": 16.24,
+      "end": 23.76,
+      "text": "December se meri pension nahi aayi. Bank mein poocha tha, par mujhe samajh nahi aaya ki kya karna hai."
+    },
+    {
+      "id": 5,
+      "dialogueInputIndex": 4,
+      "speaker": "guide",
+      "speakerName": "Pension guide",
+      "voiceName": "Man",
+      "voiceId": "5j3KBMZetWLloYDOXIdX",
+      "start": 23.76,
+      "end": 28.24,
+      "text": "Kya November 2025 ke baad pension account mein koi pension credit hua?"
+    },
+    {
+      "id": 6,
+      "dialogueInputIndex": 5,
+      "speaker": "caller",
+      "speakerName": "Kamla Devi",
+      "voiceName": "Granny",
+      "voiceId": "gMp85KKSj3ACCB5RGSw2",
+      "start": 28.24,
+      "end": 29.04,
+      "text": "Nahi."
+    },
+    {
+      "id": 7,
+      "dialogueInputIndex": 6,
+      "speaker": "guide",
+      "speakerName": "Pension guide",
+      "voiceName": "Man",
+      "voiceId": "5j3KBMZetWLloYDOXIdX",
+      "start": 29.04,
+      "end": 33.599,
+      "text": "Kya aapne 2025 mein life certificate ya Jeevan Pramaan jama kiya tha?"
+    },
+    {
+      "id": 8,
+      "dialogueInputIndex": 7,
+      "speaker": "caller",
+      "speakerName": "Kamla Devi",
+      "voiceName": "Granny",
+      "voiceId": "gMp85KKSj3ACCB5RGSw2",
+      "start": 33.599,
+      "end": 35.839,
+      "text": "Mujhe yaad nahi. Shayad nahi kiya."
+    },
+    {
+      "id": 9,
+      "dialogueInputIndex": 8,
+      "speaker": "guide",
+      "speakerName": "Pension guide",
+      "voiceName": "Man",
+      "voiceId": "5j3KBMZetWLloYDOXIdX",
+      "start": 35.839,
+      "end": 48.88,
+      "text": "Aapki baat se lagta hai ki life certificate miss hua ho sakta hai. Yeh final decision nahi hai. PPO ka pehla panna aur redacted pension statement madad kar sakte hain. Aadhaar ki photo upload mat kijiye."
+    },
+    {
+      "id": 10,
+      "dialogueInputIndex": 9,
+      "speaker": "caller",
+      "speakerName": "Kamla Devi",
+      "voiceName": "Granny",
+      "voiceId": "gMp85KKSj3ACCB5RGSw2",
+      "start": 48.88,
+      "end": 50.88,
+      "text": "Mujhe ab kya karna hoga?"
+    },
+    {
+      "id": 11,
+      "dialogueInputIndex": 10,
+      "speaker": "guide",
+      "speakerName": "Pension guide",
+      "voiceName": "Man",
+      "voiceId": "5j3KBMZetWLloYDOXIdX",
+      "start": 50.88,
+      "end": 61.84,
+      "text": "Call ke baad aapko ek written summary, document checklist aur suitable official routes milenge. Demo reference PR-2608-1042 taiyaar hai."
+    }
+  ]
+}

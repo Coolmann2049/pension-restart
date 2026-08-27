@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#fff3e5" />
+    <meta
+      name="description"
+      content="Pension Restart is an independent, elderly-first pension guidance prototype."
+    />
+    <title>Pension Restart — One call. Clear guidance.</title>
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#app">Skip to main content</a>
+
+    <div class="prototype-bar">
+      <span>Independent hackathon prototype</span>
+      <span class="prototype-copy">No live government, Aadhaar, banking or Jeevan Pramaan connection</span>
+    </div>
+
+    <header class="site-header">
+      <nav class="nav-shell" aria-label="Primary navigation">
+        <a class="brand" href="#/" aria-label="Pension Restart home">
+          <span class="brand-mark" aria-hidden="true">PR</span>
+          <span>
+            <strong>Pension Restart</strong>
+            <small>पेंशन सहायता</small>
+          </span>
+        </a>
+
+        <button class="menu-button" id="menu-button" aria-expanded="false" aria-controls="nav-links">
+          <span class="sr-only">Open menu</span>
+          <span></span><span></span><span></span>
+        </button>
+
+        <div class="nav-links" id="nav-links">
+          <a href="#/options">Life certificate help</a>
+          <a href="#/family">Family assistance</a>
+          <a href="#/help">Help centre</a>
+          <a href="#/about">About</a>
+        </div>
+
+        <div class="nav-actions">
+          <button class="access-button" id="text-size" type="button" aria-label="Increase text size">A+</button>
+          <a class="button button-small button-primary" href="#/call">Call for guidance</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="app" tabindex="-1"></main>
+
+    <footer class="site-footer">
+      <div class="footer-grid">
+        <div>
+          <a class="brand brand-footer" href="#/">
+            <span class="brand-mark" aria-hidden="true">PR</span>
+            <span><strong>Pension Restart</strong><small>One call. Clear guidance.</small></span>
+          </a>
+          <p>An independent prototype built for Build What Moves India. Not a government service.</p>
+        </div>
+        <div>
+          <h2>Get help</h2>
+          <a href="#/call">Simulate a call</a>
+          <a href="#/online">Continue online</a>
+          <a href="#/options">Life certificate options</a>
+          <a href="#/status">Check demo status</a>
+        </div>
+        <div>
+          <h2>Understand</h2>
+          <a href="#/help">Pension help centre</a>
+          <a href="#/family">Family assistance</a>
+          <a href="#/about">What is mocked?</a>
+          <button class="link-button" id="reset-demo" type="button">Reset demonstration</button>
+        </div>
+        <div class="footer-safety">
+          <h2>Stay safe</h2>
+          <p>Never share an OTP, UPI PIN, ATM PIN, CVV or bank password.</p>
+          <span class="safety-pill">Use synthetic data only</span>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© 2026 Pension Restart prototype</span>
+        <span>English · हिंदी demo</span>
+      </div>
+    </footer>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
