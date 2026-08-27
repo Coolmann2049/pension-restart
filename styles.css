@@ -558,6 +558,8 @@ h3 { font-size: clamp(1.35rem, 2.1vw, 1.75rem); }
 .brand-footer small { color: rgba(255,255,255,.58); }
 .safety-pill { display: inline-flex; padding: 8px 10px; border-radius: 999px; background: rgba(255,255,255,.1); color: #ffd9c3; font-size: .8rem; }
 .footer-bottom { max-width: var(--max); margin: 44px auto 0; padding-top: 22px; display: flex; justify-content: space-between; border-top: 1px solid rgba(255,255,255,.12); color: rgba(255,255,255,.48); font-size: .78rem; }
+.site-footer .footer-repository { display: inline; margin: 0; color: rgba(255,255,255,.72); font-size: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.site-footer .footer-repository:hover { color: white; }
 
 .toast { position: fixed; right: 24px; bottom: 24px; z-index: 300; max-width: 380px; padding: 15px 18px; border-radius: 14px; background: var(--ink); color: white; box-shadow: var(--shadow); opacity: 0; transform: translateY(20px); pointer-events: none; transition: .25s ease; }
 .toast.show { opacity: 1; transform: translateY(0); }
