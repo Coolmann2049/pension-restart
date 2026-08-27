@@ -282,9 +282,11 @@ h3 { font-size: clamp(1.35rem, 2.1vw, 1.75rem); }
 }
 .hero-art img {
   position: absolute;
-  right: -4%;
-  bottom: -2%;
-  width: min(1100px, 84vw);
+  right: -14%;
+  top: -2%;
+  width: 128%;
+  max-width: none;
+  height: auto;
   mix-blend-mode: normal;
 }
 
@@ -602,7 +604,7 @@ h3 { font-size: clamp(1.35rem, 2.1vw, 1.75rem); }
   .hero-number { font-size: clamp(2rem, 10vw, 3rem); }
   .hero-art { position: relative; inset: auto; height: 360px; margin: 22px -18px 0; opacity: 1; overflow: hidden; }
   .hero-art::before { right: 2%; top: 5%; width: 66%; height: 78%; }
-  .hero-art img { right: -16%; bottom: -1%; width: 138%; max-width: none; }
+  .hero-art img { top: -5%; right: -8%; width: 152%; }
   .hero-safety { width: 100%; font-size: .78rem; }
   .value-strip { margin: 0 18px; grid-template-columns: 1fr; }
   .value-item + .value-item { border-left: 0; border-top: 1px solid var(--line); }
