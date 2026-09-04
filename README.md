@@ -13,7 +13,8 @@ It is not a government service and never claims that a pension has been restarte
 - Vapi supports a real inbound US number and browser microphone calls with live transcripts.
 - Meta WhatsApp Cloud API supports buttons/lists, same-number continuity and case-code linking.
 - Server-Sent Events update `/admin` as calls and messages arrive.
-- A private `PR-XXXX-XXXXXX` code connects a case across channels. Same-channel callers resume by phone number, WhatsApp ID or browser cookie.
+- A private six-digit code connects a case across channels. It is verified when entered and then remains the user-facing case reference; the database continues to use an internal UUID.
+- Repeated incorrect code attempts are throttled. Legacy `PR-…` codes are migrated to six digits while remaining valid as hidden aliases.
 
 The older document-review screens remain clearly labelled demonstration states. There is no government, Aadhaar, bank or Jeevan Pramaan integration.
 
@@ -53,11 +54,14 @@ The second command creates or updates the assistant and, when `VAPI_PHONE_NUMBER
 
 ### Meta WhatsApp Cloud API
 
-1. Create/select a Meta app with the WhatsApp product and add the production business phone number.
-2. Gather the permanent system-user access token, phone-number ID, WABA ID and app secret.
-3. Set the callback URL to `https://YOUR_DOMAIN/webhooks/whatsapp`, use `WHATSAPP_VERIFY_TOKEN`, and subscribe to `messages`.
-4. Add all WhatsApp values to `.env` and restart the service.
-5. The current guided intake replies inside WhatsApp's customer-service window. Configure the optional approved template variables only when proactive status notifications are enabled.
+1. In Meta for Developers, create a **Business** app, add **WhatsApp**, and connect the WABA/production phone number. Copy the app secret, phone-number ID and WABA ID.
+2. In Business Settings, create a system user, assign the app and WhatsApp account, and generate a permanent token with `whatsapp_business_messaging` and `whatsapp_business_management`.
+3. In WhatsApp Manager, open **Message templates → Create template → Browse template library**, select `verify_account_2`, and note its exact language code. Do not edit its fixed wording.
+4. The four variables are sent as `accessing`, `Pension Restart`, `your pension guidance case`, and the generated six-digit code. Set `WHATSAPP_ACCESS_TEMPLATE_NAME=verify_account_2` and the exact approved language in `.env`.
+5. Set the callback URL to `https://YOUR_DOMAIN/webhooks/whatsapp`, use the same random value as `WHATSAPP_VERIFY_TOKEN`, and subscribe the app to `messages`.
+6. Add the remaining WhatsApp values to `.env`, restart the service, and call the helpline while consenting to the WhatsApp follow-up.
+
+The end-of-call webhook sends `verify_account_2` only after explicit consent. A user can enter the delivered six digits on the website, speak them on a later call, or send them as the first WhatsApp message. Successful entry verifies that channel identity and joins it to the existing case.
 
 ## Architecture
 
@@ -101,11 +105,11 @@ Adjust the paths/user in the service file first. Use Certbot (or your existing c
 
 ## Safety boundary
 
-- Never request or store Aadhaar/PAN numbers, OTPs, PINs, passwords, CVVs or full bank-account/card numbers.
+- Never request or store Aadhaar/PAN numbers, bank or government OTPs, PINs, passwords, CVVs or full bank-account/card numbers. Pension Restart's own six-digit access code is the only supported credential.
 - Audio recording is disabled in the generated Vapi configuration; final transcript turns and case facts are stored.
 - Public API keys are client-visible by design and must be restricted. Private provider keys stay server-side in `.env`.
 - The admin cookie is signed, HTTP-only and secure in production.
-- Case codes are bearer-like continuation secrets. Do not publish screenshots containing real codes.
+- Six-digit case codes are short-lived hackathon access credentials, not strong long-term authentication. Incorrect attempts are throttled; do not publish screenshots containing real codes or expose sensitive case details solely from a code in a production deployment.
 - Guidance is informational. The relevant pension authority makes the decision.
 
 ## Built with Codex

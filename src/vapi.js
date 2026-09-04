@@ -3,6 +3,7 @@ import { addMessage, findConversation, hydrateCase, recordWebhook, setConversati
 import { connectConversationByCode, createOrResumeCase, submitAnswer } from "./case-service.js";
 import { publish } from "./realtime.js";
 import { normalizePhone, redactSensitiveText } from "./util.js";
+import { sendCaseAccessTemplate } from "./whatsapp.js";
 
 function callId(message) {
   return message.call?.id || message.callId || "";
@@ -37,7 +38,10 @@ async function toolResult(tool, message) {
 
   if (name === "get_case_context") {
     const connected = args.caseCode
-      ? connectConversationByCode({ publicCode: args.caseCode, channel: "voice", identityKey: callerNumber(message), conversationId: conversation.id }).case
+      ? connectConversationByCode({
+        publicCode: args.caseCode, channel: "voice", identityKey: callerNumber(message),
+        conversationId: conversation.id, accessSubject: callerNumber(message),
+      }).case
       : record;
     return { name, toolCallId, result: JSON.stringify({
       caseId: connected.id, publicCode: connected.publicCode, caseVersion: connected.version,
@@ -103,6 +107,12 @@ export async function handleVapiWebhook(request, response) {
     setConversationStatus(conversation.id, "ended", new Date().toISOString());
     const record = hydrateCase(conversation.case_id);
     publish("voice.ended", { caseId: record.id, publicCode: record.publicCode, endedReason: message.endedReason || "unknown" });
+    const recipient = callerNumber(message);
+    if (recipient && record.facts.whatsapp_followup_consent?.value === true) {
+      sendCaseAccessTemplate({ to: recipient, record }).catch(error => {
+        publish("integration.error", { provider: "whatsapp", caseId: record.id, message: error.message });
+      });
+    }
   }
   return response.json({ received: true });
 }

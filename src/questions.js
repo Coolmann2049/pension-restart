@@ -1,5 +1,6 @@
 export const FIELD_DEFINITIONS = Object.freeze({
   caller_relation: { type: "enum", values: ["self", "spouse", "child", "grandchild", "relative", "helper", "other"] },
+  whatsapp_followup_consent: { type: "boolean" },
   pensioner_name: { type: "string", maxLength: 100 },
   issue_type: { type: "enum", values: ["stopped", "delayed", "reduced", "life_certificate_rejected", "new_pension_pending", "revision_pending", "family_pension", "unknown"] },
   scheme_family: { type: "enum", values: ["central_civil", "defence", "railways", "eps_95", "nps_ups_apy", "state_government", "social_assistance", "private_annuity", "employer_superannuation", "unknown"] },
@@ -21,6 +22,7 @@ const q = (id, field, en, hi, when = () => true) => ({ id, field, en, hi, when }
 
 export const QUESTIONS = [
   q("caller_relation", "caller_relation", "Are you calling about your own pension, or are you helping someone else?", "Kya aap apni pension ke baare mein call kar rahe hain, ya kisi aur ki madad kar rahe hain?"),
+  q("whatsapp_followup_consent", "whatsapp_followup_consent", "May we send this case ID and status to the same number on WhatsApp after the call?", "Kya call ke baad hum isi number par WhatsApp se case ID aur status bhej sakte hain?"),
   q("pensioner_name", "pensioner_name", "What name should I use for the pensioner? You may give only a first name.", "Pensioner ko main kis naam se bulaun? Aap sirf pehla naam bata sakte hain."),
   q("issue_type", "issue_type", "What has happened: has the pension stopped, become late or reduced, or is an application still pending?", "Kya dikkat hui hai—pension band ho gayi, der se aa rahi hai, kam ho gayi hai, ya application abhi pending hai?"),
   q("scheme_family", "scheme_family", "Do you know which pension scheme, former employer or government department this pension is connected to?", "Kya aapko pata hai ki pension kis scheme, purane employer, ya sarkari department se judi hai?"),

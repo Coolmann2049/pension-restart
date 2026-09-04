@@ -33,7 +33,7 @@ const app = document.querySelector("#app");
 const toast = document.querySelector("#toast");
 
 const caseData = {
-  id: "PR-2608-1042",
+  id: "260810",
   pensioner: "Kamla Devi",
   lastCredit: "November 2025",
   firstMissing: "December 2025",
@@ -54,7 +54,7 @@ const callScript = [
   { who: "caller", name: "Kamla Devi", text: "Mujhe yaad nahi. Shayad nahi kiya." },
   { who: "guide", name: "Pension guide", text: "Aapki baat se lagta hai ki life certificate miss hua ho sakta hai. Yeh final decision nahi hai. PPO ka pehla panna aur redacted pension statement madad kar sakte hain. Aadhaar ki photo upload mat kijiye." },
   { who: "caller", name: "Kamla Devi", text: "Mujhe ab kya karna hoga?" },
-  { who: "guide", name: "Pension guide", text: "Call ke baad aapko ek written summary, document checklist aur suitable official routes milenge. Demo reference PR-2608-1042 taiyaar hai." },
+  { who: "guide", name: "Pension guide", text: "Call ke baad aapko ek written summary, document checklist aur suitable official routes milenge. Aapka chhe ankon ka demo code 260810 taiyaar hai." },
 ];
 
 function loadState() {
@@ -116,7 +116,7 @@ function homeView() {
             <a class="button button-primary" href="#/call">☎ Talk to the voice guide</a>
             <a class="button button-quiet" href="#/online">Continue online instead</a>
           </div>
-          <div class="hero-safety"><span class="shield-dot"></span>Never share an Aadhaar number, OTP, PIN, CVV, full account number or bank password.</div>
+          <div class="hero-safety"><span class="shield-dot"></span>Never share an Aadhaar number, bank or government OTP, PIN, CVV, full account number or bank password.</div>
         </div>
         <div class="hero-art" aria-hidden="true">
           <picture>
@@ -209,7 +209,7 @@ function homeView() {
         <div class="section-heading centered"><span class="eyebrow">Bring what helps</span><h2>Never share what should remain private.</h2></div>
         <div class="card-grid two">
           <article class="info-card"><span class="icon-box teal">✓</span><h3>Helpful references</h3><ul class="check-list"><li>PPO or pension reference</li><li>Last pension-credit month</li><li>Pramaan ID or acknowledgement</li><li>Redacted pension-credit record</li></ul></article>
-          <article class="info-card"><span class="icon-box">!</span><h3>Never requested here</h3><ul class="check-list"><li>Real Aadhaar or PAN</li><li>OTP, PIN, CVV or password</li><li>Payment-card details</li><li>Unredacted bank statements</li></ul></article>
+          <article class="info-card"><span class="icon-box">!</span><h3>Never requested here</h3><ul class="check-list"><li>Real Aadhaar or PAN</li><li>Bank or government OTP, PIN, CVV or password</li><li>Payment-card details</li><li>Unredacted bank statements</li></ul></article>
         </div>
       </div>
     </section>
@@ -234,7 +234,7 @@ function callView() {
           <article class="summary-card call-option"><span class="eyebrow">Browser fallback</span><h2>Use your microphone</h2><p>The same Vapi assistant runs here if international calling is unavailable. Your browser will ask for microphone permission.</p><span class="status-badge ${browserReady ? "success" : "neutral"}">${browserReady ? "Ready" : "Awaiting Vapi public key"}</span></article>
         </div>
         <div class="spacer-md"></div>
-        <div class="callout danger"><strong>Before you begin</strong><p>This is independent AI guidance, not a government service. Do not say an Aadhaar number, OTP, PIN, password, CVV or full bank-account number. Important details are read back for confirmation.</p></div>
+        <div class="callout danger"><strong>Before you begin</strong><p>This is independent AI guidance, not a government service. Do not say an Aadhaar number, bank or government OTP, PIN, password, CVV or full bank-account number. Important details are read back for confirmation.</p></div>
         <div class="spacer-md"></div>
         <div class="phone-shell live-phone" id="phone-shell">
           <div class="phone-top"><span class="connected waiting" id="connection-state">Ready to connect</span><span id="call-duration">00:00</span></div>
@@ -303,6 +303,7 @@ const formSteps = [
 
 const webQuestionOptions = {
   caller_relation: [["self", "My pension"], ["spouse", "My spouse"], ["child", "My parent"], ["grandchild", "My grandparent"], ["helper", "Someone I help"]],
+  whatsapp_followup_consent: [["true", "Yes, send it"], ["false", "No WhatsApp follow-up"]],
   issue_type: [["stopped", "Pension stopped"], ["delayed", "Payment delayed"], ["reduced", "Amount reduced"], ["life_certificate_rejected", "Certificate rejected"], ["revision_pending", "Revision pending"], ["unknown", "I am not sure"]],
   scheme_family: [["central_civil", "Central government"], ["defence", "Defence / SPARSH"], ["railways", "Railways"], ["eps_95", "EPFO / EPS-95"], ["nps_ups_apy", "NPS / UPS / APY"], ["state_government", "State government"], ["social_assistance", "Old age / widow / disability"], ["private_annuity", "Insurance annuity"], ["employer_superannuation", "Employer pension"], ["unknown", "I am not sure"]],
   disbursement_channel: [["bank", "Bank"], ["post_office", "Post office"], ["treasury", "Treasury"], ["insurer", "Insurer"], ["employer", "Former employer"], ["unknown", "I am not sure"]],
@@ -318,13 +319,13 @@ function onlineView() {
     <section class="section section-tight"><div class="form-shell center"><span class="live-loader"></span><h2>Preparing your private case…</h2><p class="muted">No government, Aadhaar or bank system is being contacted.</p></div></section>`;
   if (webCase.complete && webCase.resolution) {
     const plan = webCase.resolution;
-    return `${pageHero("Guidance prepared", `Your case ID is ${webCase.publicCode}.`, "Keep this ID to continue through phone, WhatsApp or this browser.", '<span class="status-badge success">Guidance ready</span>')}
-      <section class="section section-tight"><div class="container summary-grid"><article class="summary-card"><span class="eyebrow">Likely explanation</span><h2>${escapeAttr(plan.likelyCause)}</h2><p class="muted">Confidence: ${escapeAttr(plan.confidence)} · ${plan.requiresHumanReview ? "Human review recommended" : "Matched to a deterministic guidance route"}</p><ol class="guidance-steps">${plan.nextSteps.map(step => `<li>${escapeAttr(step)}</li>`).join("")}</ol><div class="callout danger"><strong>Guidance, not a government decision</strong><p>${escapeAttr(plan.disclaimer)}</p></div></article><aside class="summary-card"><h2>Where to go</h2><dl class="detail-list">${detailRow("First contact", plan.primaryAuthority)}${detailRow("Escalation", plan.escalationAuthority)}${detailRow("Case ID", webCase.publicCode)}</dl><h3>Helpful documents</h3><ul>${plan.documents.map(item => `<li>${escapeAttr(item)}</li>`).join("")}</ul><a class="button button-outline button-block" href="/admin">View in operations</a></aside></div></section>`;
+    return `${pageHero("Guidance prepared", `Your six-digit code is ${webCase.publicCode}.`, "Keep this code to continue through phone, WhatsApp or this browser.", '<span class="status-badge success">Guidance ready</span>')}
+      <section class="section section-tight"><div class="container summary-grid"><article class="summary-card"><span class="eyebrow">Likely explanation</span><h2>${escapeAttr(plan.likelyCause)}</h2><p class="muted">Confidence: ${escapeAttr(plan.confidence)} · ${plan.requiresHumanReview ? "Human review recommended" : "Matched to a deterministic guidance route"}</p><ol class="guidance-steps">${plan.nextSteps.map(step => `<li>${escapeAttr(step)}</li>`).join("")}</ol><div class="callout danger"><strong>Guidance, not a government decision</strong><p>${escapeAttr(plan.disclaimer)}</p></div></article><aside class="summary-card"><h2>Where to go</h2><dl class="detail-list">${detailRow("First contact", plan.primaryAuthority)}${detailRow("Escalation", plan.escalationAuthority)}${detailRow("Six-digit code", webCase.publicCode)}</dl><h3>Helpful documents</h3><ul>${plan.documents.map(item => `<li>${escapeAttr(item)}</li>`).join("")}</ul><a class="button button-outline button-block" href="/admin">View in operations</a></aside></div></section>`;
   }
   const question = webCase.nextQuestion;
   const options = webQuestionOptions[question?.id] || [];
   const correctionOptions = [
-    ["pensioner_name", "Pensioner name"], ["issue_type", "What happened"], ["scheme_family", "Pension scheme"],
+    ["whatsapp_followup_consent", "WhatsApp follow-up"], ["pensioner_name", "Pensioner name"], ["issue_type", "What happened"], ["scheme_family", "Pension scheme"],
     ["former_employer", "Former employer"], ["disbursement_channel", "Payment channel"],
     ["disbursing_institution", "Paying institution"], ["last_credit_date", "Last payment"],
     ["pension_amount", "Monthly amount"], ["life_certificate_status", "Life certificate"], ["changed_details", "Changed details"],
@@ -338,7 +339,7 @@ function onlineView() {
         <p class="muted">${webCase.completeness || 0}% complete · Case ${escapeAttr(webCase.publicCode)}</p>
         <div class="question"><h2>${escapeAttr(question?.en || "Your guidance is being prepared")}</h2><p class="muted">${escapeAttr(question?.hi || "")}</p></div>
         ${options.length ? `<div class="choice-grid">${options.map(([value, label]) => `<button class="choice web-answer-option" data-answer="${escapeAttr(value)}" type="button"><span class="choice-dot"></span><span>${escapeAttr(label)}</span></button>`).join("")}</div>` : `<label class="sr-only" for="web-raw-answer">Your answer</label><textarea id="web-raw-answer" class="answer-input" rows="4" required placeholder="Answer in your own words…"></textarea><button class="button button-primary" type="submit">Save and continue</button>`}
-        <div class="callout danger compact"><strong>Never enter an OTP, PIN, password, Aadhaar number or complete bank account number.</strong></div>
+        <div class="callout danger compact"><strong>Never enter a bank or government OTP, PIN, password, Aadhaar number or complete bank account number.</strong></div>
         <p class="admin-error" id="web-answer-error" role="alert"></p>
       </form>
     </section>`;
@@ -374,7 +375,7 @@ function uploadCard(key, title, reason, filename, optional) {
 }
 
 function receivedView() {
-  return `${pageHero("Documents received", "We received two synthetic demonstration files.", "They are attached to demo reference PR-2608-1042. Nothing has been sent outside this browser.", '<span class="status-badge success">✓ Received</span>')}
+  return `${pageHero("Documents received", "We received two synthetic demonstration files.", "They are attached to demo code 260810. Nothing has been sent outside this browser.", '<span class="status-badge success">✓ Received</span>')}
     <section class="section section-tight">
       <div class="narrow">
         <article class="summary-card center">
@@ -473,11 +474,12 @@ function familyView() {
 }
 
 function statusView() {
+  const caseFromLink = new URLSearchParams((window.location.hash.split("?")[1] || "")).get("case") || "";
   return `${pageHero("Continue a case", "One reference. One understandable result.", "Enter the private case code given to you by phone, WhatsApp or this website.")}
     <section class="section section-tight">
       <div class="form-shell">
-        <label for="status-id"><strong>Pension Restart case code</strong></label>
-        <input id="status-id" placeholder="PR-XXXX-XXXXXX" autocomplete="off" style="width:100%;margin:12px 0 18px;padding:16px;border:2px solid var(--line);border-radius:14px" />
+        <label for="status-id"><strong>Six-digit Pension Restart code</strong></label>
+        <input id="status-id" value="${escapeAttr(caseFromLink)}" placeholder="6-digit code" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" style="width:100%;margin:12px 0 18px;padding:16px;border:2px solid var(--line);border-radius:14px" />
         <button class="button button-primary" id="check-status" type="button">Connect this case</button>
         <div id="status-result"></div>
       </div>
@@ -975,7 +977,7 @@ function downloadRecord() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "pension-restart-demo-PR-2608-1042.json";
+  link.download = "pension-restart-demo-260810.json";
   link.click();
   URL.revokeObjectURL(url);
   showToast("Synthetic recovery record downloaded.");

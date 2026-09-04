@@ -29,13 +29,12 @@ export function timingSafeEqualText(left = "", right = "") {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-export function publicCaseCode(secret) {
-  const alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
-  const entropy = crypto.randomBytes(7);
-  let body = "";
-  for (let i = 0; i < 8; i += 1) body += alphabet[entropy[i % entropy.length] % alphabet.length];
-  const checksum = crypto.createHmac("sha256", secret).update(body).digest("hex").slice(0, 2).toUpperCase();
-  return `PR-${body.slice(0, 4)}-${body.slice(4)}${checksum}`;
+export function publicCaseCode() {
+  return String(crypto.randomInt(100_000, 1_000_000));
+}
+
+export function accessSubjectHash(secret, channel, subject) {
+  return crypto.createHmac("sha256", secret).update(`${channel}:${subject}`).digest("hex");
 }
 
 export function redactPhone(phone = "") {

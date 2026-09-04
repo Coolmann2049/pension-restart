@@ -5,13 +5,19 @@ import test from "node:test";
 const databasePath = `/tmp/pension-restart-test-${process.pid}.db`;
 process.env.NODE_ENV = "test";
 process.env.DATABASE_PATH = databasePath;
+process.env.VAPI_WEBHOOK_SECRET = "";
+process.env.WHATSAPP_ACCESS_TOKEN = "";
+process.env.WHATSAPP_PHONE_NUMBER_ID = "";
+process.env.META_APP_SECRET = "";
+process.env.WHATSAPP_ACCESS_TEMPLATE_NAME = "verify_account_2";
+process.env.WHATSAPP_ACCESS_TEMPLATE_LANGUAGE = "en";
 delete process.env.OPENAI_API_KEY;
 
 const { connectConversationByCode, createOrResumeCase, submitAnswer } = await import("../src/case-service.js");
 const { commitFact, findCaseByIdentity, getCaseRecord, hydrateCase } = await import("../src/db.js");
 const { resolveGuidance } = await import("../src/guidance-engine.js");
 const { handleVapiWebhook } = await import("../src/vapi.js");
-const { processWhatsAppPayload } = await import("../src/whatsapp.js");
+const { buildCaseAccessTemplate, processWhatsAppPayload } = await import("../src/whatsapp.js");
 const { redactSensitiveText } = await import("../src/util.js");
 
 test.after(() => {
@@ -25,7 +31,16 @@ test("creates a resumable case for the same channel identity", () => {
   const second = createOrResumeCase({ channel: "voice", identityKey: "+919999999999", externalConversationId: "call-two" });
   assert.equal(second.resumed, true);
   assert.equal(second.case.id, first.case.id);
+  assert.match(first.case.publicCode, /^\d{6}$/);
   assert.equal(second.nextQuestion.id, "caller_relation");
+});
+
+test("builds the verify_account_2 body with the six-digit case access code", () => {
+  const body = buildCaseAccessTemplate({ publicCode: "482731" });
+  assert.equal(body.template.name, "verify_account_2");
+  assert.deepEqual(body.template.components[0].parameters.map(parameter => parameter.text), [
+    "accessing", "Pension Restart", "your pension guidance case", "482731",
+  ]);
 });
 
 test("moves a new channel conversation onto an existing case code", () => {
@@ -41,6 +56,17 @@ test("moves a new channel conversation onto an existing case code", () => {
   assert.equal(getCaseRecord(temporaryCaseId), null);
 });
 
+test("rate limits repeated invalid six-digit code attempts", () => {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    assert.throws(() => connectConversationByCode({
+      publicCode: "000000", channel: "web", identityKey: "rate-browser", accessSubject: "rate-test",
+    }), /Code not recognized/);
+  }
+  assert.throws(() => connectConversationByCode({
+    publicCode: "000000", channel: "web", identityKey: "rate-browser", accessSubject: "rate-test",
+  }), error => error.statusCode === 429);
+});
+
 test("stores a confirmed raw answer and advances exactly one question", async () => {
   const started = createOrResumeCase({ channel: "web", identityKey: "browser_test", externalConversationId: "web-one" });
   const result = await submitAnswer({
@@ -54,7 +80,7 @@ test("stores a confirmed raw answer and advances exactly one question", async ()
   });
   assert.equal(result.accepted, true);
   assert.equal(result.currentFacts.caller_relation, "grandchild");
-  assert.equal(result.nextQuestion.id, "pensioner_name");
+  assert.equal(result.nextQuestion.id, "whatsapp_followup_consent");
 });
 
 test("does not force an ambiguous pension family into a current fact", async () => {
@@ -80,6 +106,7 @@ test("does not force an ambiguous pension family into a current fact", async () 
 test("accepts machine-readable boolean button values", async () => {
   const started = createOrResumeCase({ channel: "web", identityKey: "browser_boolean", externalConversationId: "web-boolean" });
   commitFact({ caseId: started.case.id, field: "caller_relation", value: "self", confirmed: true });
+  commitFact({ caseId: started.case.id, field: "whatsapp_followup_consent", value: true, confirmed: true });
   commitFact({ caseId: started.case.id, field: "pensioner_name", value: "Kamla", confirmed: true });
   commitFact({ caseId: started.case.id, field: "issue_type", value: "stopped", confirmed: true });
   commitFact({ caseId: started.case.id, field: "scheme_family", value: "eps_95", confirmed: true });
@@ -112,7 +139,7 @@ test("preserves the old fact as superseded when a correction is confirmed", () =
 test("a rejected final readback waits for a specific correction", async () => {
   const started = createOrResumeCase({ channel: "voice", identityKey: "+919888888888", externalConversationId: "call-correction" });
   for (const [field, value] of Object.entries({
-    caller_relation: "self", pensioner_name: "Kamla", issue_type: "stopped", scheme_family: "eps_95",
+    caller_relation: "self", whatsapp_followup_consent: true, pensioner_name: "Kamla", issue_type: "stopped", scheme_family: "eps_95",
     disbursement_channel: "bank", disbursing_institution: "SBI", last_credit_date: "May 2026",
     pension_amount: 12000, life_certificate_status: "not_submitted", changed_details: "none", location_state: "Bihar",
   })) commitFact({ caseId: started.case.id, field, value, confirmed: true });
@@ -171,7 +198,7 @@ test("Vapi tool calls return the named result contract", async () => {
   assert.equal(statusCode, 200);
   assert.equal(body.results[0].name, "submit_answer");
   assert.equal(body.results[0].toolCallId, "tool-one");
-  assert.equal(JSON.parse(body.results[0].result).nextQuestion.id, "pensioner_name");
+  assert.equal(JSON.parse(body.results[0].result).nextQuestion.id, "whatsapp_followup_consent");
 });
 
 test("WhatsApp stores an inbound answer once and advances via a button", async () => {
@@ -186,7 +213,7 @@ test("WhatsApp stores an inbound answer once and advances via a button", async (
   const record = hydrateCase(findCaseByIdentity("whatsapp", "919666666666").id);
   assert.equal(record.facts.caller_relation.value, "self");
   assert.equal(record.messages.filter(message => message.content === "self").length, 1);
-  assert.equal(record.currentQuestionId, "pensioner_name");
+  assert.equal(record.currentQuestionId, "whatsapp_followup_consent");
 });
 
 test("WhatsApp connects an existing code without interpreting the code as an answer", async () => {

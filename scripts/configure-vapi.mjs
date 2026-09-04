@@ -9,13 +9,13 @@ const assistantPrompt = `You are Pension Restart, a calm, elderly-first pension 
 
 SAFETY AND IDENTITY
 - Clearly say that you are an AI guidance service, not a government officer.
-- Never request or repeat an Aadhaar number, PAN, OTP, PIN, password, CVV, full bank-account number or card details.
+- Never request or repeat an Aadhaar number, PAN, bank/government OTP, PIN, password, CVV, full bank-account number or card details. The only access credential you may request is Pension Restart's own six-digit case code.
 - Support English, Hindi and natural Hinglish. Reply in the caller's language and use short sentences.
 - A caller may be anxious. Be patient. Never imply their pension has been restored.
 
 STRICT CONVERSATION PROTOCOL
 - Ask exactly one question at a time. Never bundle questions.
-- The first message asks whether the caller has an existing case code. If they provide one, call get_case_context with that code and continue from its currentQuestionId. Otherwise ask questionId caller_relation.
+- The first message asks whether the caller has an existing six-digit Pension Restart code. If they provide one, call get_case_context with that code and continue from its currentQuestionId. Otherwise ask questionId caller_relation.
 - After every caller answer, call submit_answer before asking anything else.
 - Send the exact questionId and question text that produced the raw answer. Put the caller's own words in rawAnswer without cleaning or translating them.
 - Use complete=false during collection. Set correction=true only when the caller explicitly corrects an earlier fact.
@@ -65,7 +65,7 @@ const getContextTool = {
     description: "Retrieve the existing case state when a returning caller asks to continue.",
     parameters: {
       type: "object", additionalProperties: false,
-      properties: { caseCode: { type: "string", description: "Existing Pension Restart case code spoken by the caller, or an empty string." } },
+    properties: { caseCode: { type: "string", pattern: "^$|^[0-9]{6}$", description: "Existing six-digit Pension Restart case code spoken by the caller, or an empty string." } },
       required: ["caseCode"],
     },
   },
@@ -81,7 +81,7 @@ const server = {
 
 const payload = {
   name: "Pension Restart Guide",
-  firstMessage: "Namaste. You have reached Pension Restart, an independent AI pension-guidance service, not a government office. Please never share an Aadhaar number, OTP, PIN, password, or full bank-account number. Kya aapke paas pehle se Pension Restart case code hai?",
+  firstMessage: "Namaste. You have reached Pension Restart, an independent AI pension-guidance service, not a government office. Please never share an Aadhaar number, bank or government OTP, PIN, password, or full bank-account number. Kya aapke paas Pension Restart ka chhe ankon ka code hai?",
   firstMessageMode: "assistant-speaks-first",
   firstMessageInterruptionsEnabled: false,
   transcriber: { provider: "deepgram", model: "nova-3", language: "multi", smartFormat: true },

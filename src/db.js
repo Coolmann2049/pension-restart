@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { config } from "./config.js";
-import { id, now, safeJson } from "./util.js";
+import { accessSubjectHash, id, now, publicCaseCode, safeJson } from "./util.js";
 
 fs.mkdirSync(path.dirname(config.databasePath), { recursive: true });
 export const db = new Database(config.databasePath);
@@ -101,17 +101,47 @@ db.exec(`
     created_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS notifications (
+    id TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+    channel TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    recipient_masked TEXT,
+    status TEXT NOT NULL,
+    provider_message_id TEXT,
+    error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(case_id, channel, kind)
+  );
+
+  CREATE TABLE IF NOT EXISTS case_code_aliases (
+    legacy_code TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS case_access_attempts (
+    id TEXT PRIMARY KEY,
+    subject_hash TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    successful INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_cases_updated ON cases(updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_conversations_case ON conversations(case_id, started_at DESC);
   CREATE INDEX IF NOT EXISTS idx_messages_case ON messages(case_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_fact_events_case ON fact_events(case_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_case_access_attempts_subject ON case_access_attempts(subject_hash, channel, created_at);
 `);
 
 const statements = {
   insertCase: db.prepare(`INSERT INTO cases
     (id, public_code, status, current_question_id, completeness, version, created_at, updated_at)
     VALUES (@id, @publicCode, @status, @currentQuestionId, 0, 0, @createdAt, @createdAt)`),
-  caseById: db.prepare("SELECT * FROM cases WHERE id = ? OR public_code = ?"),
+  caseById: db.prepare(`SELECT * FROM cases WHERE id = ? OR public_code = ? OR id =
+    (SELECT case_id FROM case_code_aliases WHERE legacy_code = ?)`),
   cases: db.prepare("SELECT * FROM cases ORDER BY updated_at DESC LIMIT ?"),
   deleteExpiredCases: db.prepare("DELETE FROM cases WHERE updated_at < ?"),
   updateCaseProgress: db.prepare(`UPDATE cases SET status = @status, current_question_id = @currentQuestionId,
@@ -158,7 +188,39 @@ const statements = {
     (id, provider, external_id, event_type, received_at) VALUES (?, ?, ?, ?, ?)`),
   insertAudit: db.prepare(`INSERT INTO audit_events (id, case_id, type, payload_json, created_at)
     VALUES (?, ?, ?, ?, ?)`),
+  insertNotification: db.prepare(`INSERT OR IGNORE INTO notifications
+    (id, case_id, channel, kind, recipient_masked, status, created_at, updated_at)
+    VALUES (@id, @caseId, @channel, @kind, @recipientMasked, 'pending', @at, @at)`),
+  failedNotification: db.prepare(`UPDATE notifications SET status = 'pending', error = NULL, updated_at = @at
+    WHERE case_id = @caseId AND channel = @channel AND kind = @kind AND status = 'failed'`),
+  finishNotification: db.prepare(`UPDATE notifications SET status = @status, provider_message_id = @providerMessageId,
+    error = @error, updated_at = @at WHERE case_id = @caseId AND channel = @channel AND kind = @kind`),
+  notificationsForCase: db.prepare("SELECT * FROM notifications WHERE case_id = ? ORDER BY created_at"),
+  legacyCases: db.prepare("SELECT id, public_code FROM cases WHERE public_code NOT GLOB '[0-9][0-9][0-9][0-9][0-9][0-9]'"),
+  insertCodeAlias: db.prepare("INSERT OR IGNORE INTO case_code_aliases (legacy_code, case_id, created_at) VALUES (?, ?, ?)"),
+  updatePublicCode: db.prepare("UPDATE cases SET public_code = ?, updated_at = ? WHERE id = ?"),
+  recentAccessAttempts: db.prepare("SELECT COUNT(*) AS count FROM case_access_attempts WHERE subject_hash = ? AND channel = ? AND created_at >= ?"),
+  insertAccessAttempt: db.prepare("INSERT INTO case_access_attempts (id, subject_hash, channel, successful, created_at) VALUES (?, ?, ?, ?, ?)"),
 };
+
+function uniquePublicCode() {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const candidate = publicCaseCode();
+    if (!statements.caseById.get(candidate, candidate, candidate)) return candidate;
+  }
+  throw new Error("Could not allocate a unique six-digit case code");
+}
+
+const migrateLegacyCodes = db.transaction(() => {
+  for (const row of statements.legacyCases.all()) {
+    const replacement = uniquePublicCode();
+    const at = now();
+    statements.insertCodeAlias.run(row.public_code, row.id, at);
+    statements.updatePublicCode.run(replacement, at, row.id);
+  }
+});
+
+migrateLegacyCodes();
 
 function mapCase(row) {
   if (!row) return null;
@@ -175,14 +237,15 @@ function mapCase(row) {
   };
 }
 
-export function createCaseRecord(publicCode, currentQuestionId) {
+export function createCaseRecord(currentQuestionId) {
+  const publicCode = uniquePublicCode();
   const record = { id: id("case"), publicCode, status: "collecting", currentQuestionId, createdAt: now() };
   statements.insertCase.run(record);
   return getCaseRecord(record.id);
 }
 
 export function getCaseRecord(caseIdOrCode) {
-  return mapCase(statements.caseById.get(caseIdOrCode, caseIdOrCode));
+  return mapCase(statements.caseById.get(caseIdOrCode, caseIdOrCode, caseIdOrCode));
 }
 
 export function listCaseRecords(limit = 100) {
@@ -203,6 +266,20 @@ export function findCaseByIdentity(channel, identityKey) {
 export function attachIdentity(caseId, channel, identityKey, verified = false) {
   if (!identityKey) return;
   statements.upsertIdentity.run({ id: id("identity"), caseId, channel, identityKey, verified: verified ? 1 : 0, at: now() });
+}
+
+export function checkCaseAccessLimit({ channel, subject, maxAttempts = 5, windowMinutes = 15 }) {
+  const subjectHash = accessSubjectHash(config.caseCodeSecret, channel, subject || "anonymous");
+  const cutoff = new Date(Date.now() - windowMinutes * 60_000).toISOString();
+  const count = statements.recentAccessAttempts.get(subjectHash, channel, cutoff).count;
+  if (count >= maxAttempts) {
+    throw Object.assign(new Error(`Too many code attempts. Try again in ${windowMinutes} minutes.`), { statusCode: 429 });
+  }
+  return subjectHash;
+}
+
+export function recordCaseAccessAttempt({ channel, subjectHash, successful }) {
+  statements.insertAccessAttempt.run(id("access"), subjectHash, channel, successful ? 1 : 0, now());
 }
 
 export function getOrCreateConversation({ caseId, channel, externalId, identityKey = "", language = "" }) {
@@ -289,6 +366,17 @@ export function addAudit(caseId, type, payload) {
   statements.insertAudit.run(id("audit"), caseId || null, type, JSON.stringify(payload), now());
 }
 
+export function beginNotification({ caseId, channel, kind, recipientMasked = "" }) {
+  const at = now();
+  const inserted = statements.insertNotification.run({ id: id("notification"), caseId, channel, kind, recipientMasked, at });
+  if (inserted.changes === 1) return true;
+  return statements.failedNotification.run({ caseId, channel, kind, at }).changes === 1;
+}
+
+export function finishNotification({ caseId, channel, kind, status, providerMessageId = null, error = null }) {
+  statements.finishNotification.run({ caseId, channel, kind, status, providerMessageId, error, at: now() });
+}
+
 export function hydrateCase(caseIdOrCode) {
   const record = getCaseRecord(caseIdOrCode);
   if (!record) return null;
@@ -307,6 +395,11 @@ export function hydrateCase(caseIdOrCode) {
       id: row.id, field: row.field, value: safeJson(row.value_json), rawAnswer: row.raw_answer,
       confidence: row.confidence, confirmed: Boolean(row.confirmed), state: row.state,
       supersedesId: row.supersedes_id, source: row.source, createdAt: row.created_at,
+    })),
+    notifications: statements.notificationsForCase.all(record.id).map(row => ({
+      id: row.id, channel: row.channel, kind: row.kind, recipientMasked: row.recipient_masked,
+      status: row.status, providerMessageId: row.provider_message_id, error: row.error,
+      createdAt: row.created_at, updatedAt: row.updated_at,
     })),
   };
 }

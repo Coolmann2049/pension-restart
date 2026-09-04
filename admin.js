@@ -78,6 +78,7 @@ function renderDetail(record) {
       </article>
     </div>
     ${record.resolution ? `<article class="admin-card resolution-card"><div><span class="eyebrow">Resolution plan</span><h2>${escapeHtml(record.resolution.likelyCause)}</h2><p>Confidence: ${escapeHtml(record.resolution.confidence)} · ${record.resolution.requiresHumanReview ? "Human review required" : "Deterministic route available"}</p></div><ol>${record.resolution.nextSteps.map(step => `<li>${escapeHtml(step)}</li>`).join("")}</ol><div class="authority"><strong>${escapeHtml(record.resolution.primaryAuthority)}</strong><span>Escalation: ${escapeHtml(record.resolution.escalationAuthority)}</span></div></article>` : ""}
+    ${record.notifications?.length ? `<article class="admin-card"><h2>Follow-up delivery</h2><div class="history-list">${record.notifications.map(item => `<div><span>${escapeHtml(item.channel)}</span><strong>${escapeHtml(item.kind)}</strong><em>${escapeHtml(item.status)}</em><small>${escapeHtml(item.recipientMasked || "")}</small></div>`).join("")}</div></article>` : ""}
     <details class="admin-card"><summary>Fact correction history</summary><div class="history-list">${record.factHistory.map(item => `<div><span>${escapeHtml(factLabel(item.field))}</span><strong>${escapeHtml(displayValue(item.value))}</strong><em>${escapeHtml(item.state)}</em><small>${escapeHtml(item.rawAnswer || "")}</small></div>`).join("") || '<p class="muted">No fact events yet.</p>'}</div></details>`;
 }
 
@@ -109,7 +110,7 @@ function addEvent(event) {
 function connectStream() {
   stream?.close();
   stream = new EventSource("/api/admin/events");
-  const types = ["case.created", "case.connected", "conversation.connected", "answer.received", "answer.interpreting", "case.updated", "resolution.prepared", "transcript.final", "voice.status", "voice.ended", "whatsapp.outbound.preview", "integration.error"];
+  const types = ["case.created", "case.connected", "conversation.connected", "answer.received", "answer.interpreting", "case.updated", "resolution.prepared", "transcript.final", "voice.status", "voice.ended", "notification.sent", "notification.failed", "whatsapp.outbound.preview", "integration.error"];
   for (const type of types) stream.addEventListener(type, message => {
     addEvent(JSON.parse(message.data));
     window.clearTimeout(connectStream.refresh);

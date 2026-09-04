@@ -1,20 +1,19 @@
 import {
-  addAudit, addMessage, addUncertainFact, attachIdentity, commitFact, createCaseRecord,
+  addAudit, addMessage, addUncertainFact, attachIdentity, checkCaseAccessLimit, commitFact, createCaseRecord,
   findCaseByIdentity, getCaseRecord, getFacts, getOrCreateConversation, hydrateCase, moveConversationToCase,
-  saveResolution, updateCaseProgress,
+  recordCaseAccessAttempt, saveResolution, updateCaseProgress,
 } from "./db.js";
-import { config } from "./config.js";
 import { completion, nextQuestion, questionById } from "./questions.js";
 import { interpretAnswer, normalizeProposedFact } from "./interpreter.js";
 import { resolveGuidance } from "./guidance-engine.js";
 import { publish } from "./realtime.js";
-import { publicCaseCode, redactSensitiveText } from "./util.js";
+import { redactSensitiveText } from "./util.js";
 
 export function createOrResumeCase({ channel = "web", identityKey = "", externalConversationId, language = "" }) {
   let record = identityKey ? findCaseByIdentity(channel, identityKey) : null;
   let resumed = Boolean(record);
   if (!record || ["closed"].includes(record.status)) {
-    record = createCaseRecord(publicCaseCode(config.caseCodeSecret), "caller_relation");
+    record = createCaseRecord("caller_relation");
     if (identityKey) attachIdentity(record.id, channel, identityKey, channel === "whatsapp");
     resumed = false;
     publish("case.created", { caseId: record.id, publicCode: record.publicCode, channel });
@@ -29,15 +28,21 @@ export function createOrResumeCase({ channel = "web", identityKey = "", external
   return { case: hydrateCase(record.id), conversation, resumed, nextQuestion: nextQuestion(facts) };
 }
 
-export function connectConversationByCode({ publicCode, channel, identityKey = "", conversationId = null }) {
-  const compact = String(publicCode || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-  const normalized = compact.startsWith("PR") && compact.length === 12
-    ? `PR-${compact.slice(2, 6)}-${compact.slice(6)}`
-    : String(publicCode || "").trim().toUpperCase();
+export function connectConversationByCode({ publicCode, channel, identityKey = "", conversationId = null, accessSubject = "" }) {
+  const supplied = String(publicCode || "").trim().toUpperCase();
+  const compact = supplied.replace(/[^A-Z0-9]/g, "");
+  const normalized = /^\d{6}$/.test(compact)
+    ? compact
+    : compact.startsWith("PR") && compact.length === 12
+      ? `PR-${compact.slice(2, 6)}-${compact.slice(6)}`
+      : supplied;
+  const subjectHash = checkCaseAccessLimit({ channel, subject: accessSubject || identityKey || "anonymous" });
   const target = getCaseRecord(normalized);
-  if (!target) throw Object.assign(new Error("Case code not found"), { statusCode: 404 });
+  recordCaseAccessAttempt({ channel, subjectHash, successful: Boolean(target) });
+  if (!target) throw Object.assign(new Error("Code not recognized"), { statusCode: 404 });
   if (conversationId) moveConversationToCase({ conversationId, targetCaseId: target.id, channel, identityKey });
-  else if (identityKey) attachIdentity(target.id, channel, identityKey, channel === "whatsapp");
+  else if (identityKey) attachIdentity(target.id, channel, identityKey, true);
+  if (identityKey) attachIdentity(target.id, channel, identityKey, true);
   const record = hydrateCase(target.id);
   publish("case.connected", { caseId: record.id, publicCode: record.publicCode, channel });
   return { case: record, nextQuestion: nextQuestion(record.facts) };
@@ -50,7 +55,11 @@ function localizedQuestion(question) {
 function summaryForReadback(facts) {
   const entries = Object.entries(facts)
     .filter(([field]) => field !== "intake_confirmed")
-    .map(([field, fact]) => `${field.replaceAll("_", " ")}: ${String(fact.value)}`);
+    .map(([field, fact]) => {
+      const label = field === "whatsapp_followup_consent" ? "WhatsApp follow-up" : field.replaceAll("_", " ");
+      const displayed = typeof fact.value === "boolean" ? (fact.value ? "yes" : "no") : String(fact.value);
+      return `${label}: ${displayed}`;
+    });
   return entries.join("; ");
 }
 

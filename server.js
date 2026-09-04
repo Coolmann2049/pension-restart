@@ -82,6 +82,7 @@ app.post("/api/cases/claim", (request, response, next) => {
     const current = createOrResumeCase({ channel: "web", identityKey, externalConversationId: `web:${identityKey}` });
     const result = connectConversationByCode({
       publicCode: request.body?.publicCode, channel: "web", identityKey, conversationId: current.conversation.id,
+      accessSubject: `${identityKey}:${request.ip}`,
     });
     response.json({
       caseId: result.case.id, publicCode: result.case.publicCode, caseVersion: result.case.version,

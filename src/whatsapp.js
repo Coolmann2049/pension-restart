@@ -1,13 +1,16 @@
 import crypto from "node:crypto";
 import { config } from "./config.js";
-import { addMessage, hydrateCase, recordWebhook, updateCaseProgress } from "./db.js";
+import {
+  addAudit, addMessage, beginNotification, finishNotification, hydrateCase, recordWebhook, updateCaseProgress,
+} from "./db.js";
 import { connectConversationByCode, createOrResumeCase, submitAnswer } from "./case-service.js";
 import { questionById } from "./questions.js";
 import { publish } from "./realtime.js";
-import { redactSensitiveText, timingSafeEqualText } from "./util.js";
+import { normalizePhone, redactPhone, redactSensitiveText, timingSafeEqualText } from "./util.js";
 
 const BUTTON_OPTIONS = {
   caller_relation: [["self", "My pension"], ["child", "Parent's pension"], ["helper", "Helping someone"]],
+  whatsapp_followup_consent: [["true", "Yes, send it"], ["false", "No, thank you"]],
   issue_type: [["stopped", "Pension stopped"], ["delayed", "Payment delayed"], ["reduced", "Amount reduced"]],
   disbursement_channel: [["bank", "Bank"], ["post_office", "Post office"], ["unknown", "Not sure"]],
   life_certificate_status: [["submitted_accepted", "Submitted"], ["not_submitted", "Not submitted"], ["not_remembered", "Don't remember"]],
@@ -30,8 +33,8 @@ const LIST_OPTIONS = {
 };
 
 const CORRECTION_OPTIONS = [
-  ["pensioner_name", "Pensioner name"], ["issue_type", "What happened"], ["scheme_family", "Pension scheme"],
-  ["former_employer", "Former employer"], ["disbursement_channel", "Payment channel"],
+  ["whatsapp_followup_consent", "WhatsApp follow-up"], ["pensioner_name", "Pensioner name"],
+  ["issue_type", "What happened"], ["scheme_family", "Pension scheme"], ["disbursement_channel", "Payment channel"],
   ["disbursing_institution", "Paying institution"], ["last_credit_date", "Last payment"],
   ["pension_amount", "Pension amount"], ["life_certificate_status", "Life certificate"], ["changed_details", "Changed details"],
 ];
@@ -56,6 +59,53 @@ async function graphSend(to, body) {
   if (!response.ok) throw new Error(`WhatsApp returned ${response.status}: ${JSON.stringify(payload).slice(0, 400)}`);
   return payload;
 }
+
+export function buildCaseAccessTemplate(record) {
+  return {
+    type: "template",
+    template: {
+      name: config.whatsapp.accessTemplateName,
+      language: { code: config.whatsapp.accessTemplateLanguage },
+      components: [{
+        type: "body",
+        parameters: [
+          { type: "text", text: config.whatsapp.accessTemplateAction },
+          { type: "text", text: config.whatsapp.accessTemplateAccount },
+          { type: "text", text: config.whatsapp.accessTemplateLinkTarget },
+          { type: "text", text: record.publicCode },
+        ],
+      }],
+    },
+  };
+}
+
+export async function sendCaseAccessTemplate({ to, record }) {
+  if (record?.facts?.whatsapp_followup_consent?.value !== true) return { skipped: "consent_not_given" };
+  if (!config.whatsapp.accessTemplateName || !config.whatsapp.accessToken || !config.whatsapp.phoneNumberId) {
+    return { skipped: "template_not_configured" };
+  }
+  const normalized = normalizePhone(to).replace(/^\+/, "");
+  if (!normalized) return { skipped: "missing_recipient" };
+  const kind = `case-access-code:${config.whatsapp.accessTemplateName}:${config.whatsapp.accessTemplateLanguage}`;
+  if (!beginNotification({ caseId: record.id, channel: "whatsapp", kind, recipientMasked: redactPhone(`+${normalized}`) })) {
+    return { skipped: "already_sent" };
+  }
+  try {
+    const result = await graphSend(normalized, buildCaseAccessTemplate(record));
+    const providerMessageId = result.messages?.[0]?.id || null;
+    finishNotification({ caseId: record.id, channel: "whatsapp", kind, status: "sent", providerMessageId });
+    addAudit(record.id, "notification.sent", { channel: "whatsapp", kind, providerMessageId });
+    publish("notification.sent", { caseId: record.id, publicCode: record.publicCode, channel: "whatsapp", kind });
+    return { sent: true, providerMessageId };
+  } catch (error) {
+    finishNotification({ caseId: record.id, channel: "whatsapp", kind, status: "failed", error: error.message.slice(0, 500) });
+    addAudit(record.id, "notification.failed", { channel: "whatsapp", kind, error: error.message.slice(0, 500) });
+    publish("notification.failed", { caseId: record.id, publicCode: record.publicCode, channel: "whatsapp", kind, error: error.message });
+    throw error;
+  }
+}
+
+export const sendCaseFollowupTemplate = sendCaseAccessTemplate;
 
 function questionMessage(question) {
   const buttons = BUTTON_OPTIONS[question.id];
@@ -96,7 +146,14 @@ function answerFromMessage(message) {
     const [, questionId, ...valueParts] = interactive.id.split(":");
     return { questionId, rawAnswer: redactSensitiveText(valueParts.join(":")), confirmed: true };
   }
-  return { rawAnswer: redactSensitiveText(message.text?.body || message.button?.text || "") };
+  const originalAnswer = message.text?.body || message.button?.text || "";
+  return { rawAnswer: redactSensitiveText(originalAnswer), originalAnswer: String(originalAnswer) };
+}
+
+function suppliedCaseCode(value = "") {
+  const trimmed = String(value).trim();
+  if (/^\d{6}$/.test(trimmed)) return trimmed;
+  return trimmed.match(/PR[-\s][A-Z0-9]{4}[-\s][A-Z0-9]{6}/i)?.[0]?.replaceAll(" ", "-") || "";
 }
 
 function correctionMessage() {
@@ -118,23 +175,34 @@ export async function processWhatsAppPayload(payload) {
     if (!recordWebhook("whatsapp", message.id, "message")) continue;
     const waId = message.from;
     const answer = answerFromMessage(message);
-    const suppliedCode = answer.rawAnswer.match(/PR[-\s][A-Z0-9]{4}[-\s][A-Z0-9]{6}/i)?.[0]?.replaceAll(" ", "-");
     let existing = createOrResumeCase({ channel: "whatsapp", identityKey: waId, externalConversationId: `wa:${waId}` });
+    let record = hydrateCase(existing.case.id);
+    const suppliedCode = !record.messages.length && !Object.keys(record.facts).length
+      ? suppliedCaseCode(answer.originalAnswer || answer.rawAnswer)
+      : "";
     let linkedByCode = false;
+    let codeError = null;
     if (suppliedCode) {
       try {
         const connected = connectConversationByCode({
-          publicCode: suppliedCode, channel: "whatsapp", identityKey: waId, conversationId: existing.conversation.id,
+          publicCode: suppliedCode, channel: "whatsapp", identityKey: waId,
+          conversationId: existing.conversation.id, accessSubject: waId,
         });
         existing = { ...existing, case: connected.case, nextQuestion: connected.nextQuestion };
         linkedByCode = true;
       }
-      catch {}
+      catch (error) { codeError = error; }
     }
-    const record = hydrateCase(existing.case.id);
+    record = hydrateCase(existing.case.id);
+    if (codeError) {
+      await graphSend(waId, { type: "text", text: { body: codeError.statusCode === 429
+        ? "Too many code attempts. Please wait 15 minutes and try again."
+        : "That six-digit Pension Restart code was not recognized. Please check the WhatsApp message and try again." } });
+      continue;
+    }
     if (linkedByCode) {
       addMessage({ caseId: record.id, conversationId: existing.conversation.id, externalId: message.id, role: "user", content: "Shared Pension Restart case code" });
-      await graphSend(waId, { type: "text", text: { body: `Case ${record.publicCode} is now connected to this WhatsApp number.` } });
+      await graphSend(waId, { type: "text", text: { body: `Code ${record.publicCode} is verified and this pension case is now connected to your WhatsApp number.` } });
       if (record.resolution) {
         await graphSend(waId, { type: "text", text: { body: `${record.resolution.likelyCause}\n\nCase: ${record.publicCode}` } });
       } else {
@@ -147,7 +215,7 @@ export async function processWhatsAppPayload(payload) {
       addMessage({ caseId: record.id, conversationId: existing.conversation.id, externalId: message.id, role: "user", content: answer.rawAnswer || "Started WhatsApp guidance" });
       publish("transcript.final", { caseId: record.id, publicCode: record.publicCode, role: "user", transcript: answer.rawAnswer, channel: "whatsapp", profileName: contact?.profile?.name });
       const first = existing.nextQuestion || questionById(record.currentQuestionId);
-      await graphSend(waId, { type: "text", text: { body: `Namaste. Your Pension Restart case is ${record.publicCode}. Never send an OTP, PIN, password, Aadhaar number or full bank-account number here.` } });
+      await graphSend(waId, { type: "text", text: { body: `Namaste. Your Pension Restart code is ${record.publicCode}. You may use this six-digit code only with Pension Restart. Never send a bank or government OTP, PIN, password, Aadhaar number or full bank-account number here.` } });
       await graphSend(waId, questionMessage(first));
       continue;
     }

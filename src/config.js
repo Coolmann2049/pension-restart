@@ -55,8 +55,11 @@ export const config = Object.freeze({
     businessAccountId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "",
     apiVersion: process.env.WHATSAPP_API_VERSION || "v23.0",
     displayNumber: process.env.WHATSAPP_DISPLAY_NUMBER || "",
-    statusTemplateName: process.env.WHATSAPP_STATUS_TEMPLATE_NAME || "",
-    statusTemplateLanguage: process.env.WHATSAPP_STATUS_TEMPLATE_LANGUAGE || "en",
+    accessTemplateName: process.env.WHATSAPP_ACCESS_TEMPLATE_NAME || process.env.WHATSAPP_STATUS_TEMPLATE_NAME || "",
+    accessTemplateLanguage: process.env.WHATSAPP_ACCESS_TEMPLATE_LANGUAGE || process.env.WHATSAPP_STATUS_TEMPLATE_LANGUAGE || "en",
+    accessTemplateAction: process.env.WHATSAPP_ACCESS_TEMPLATE_ACTION || "accessing",
+    accessTemplateAccount: process.env.WHATSAPP_ACCESS_TEMPLATE_ACCOUNT || "Pension Restart",
+    accessTemplateLinkTarget: process.env.WHATSAPP_ACCESS_TEMPLATE_LINK_TARGET || "your pension guidance case",
   },
 });
 
@@ -68,6 +71,7 @@ export function configurationStatus() {
     vapiWebCall: Boolean(config.vapi.publicKey && config.vapi.assistantId),
     vapiPhone: Boolean(config.vapi.phoneNumberDisplay),
     whatsapp: Boolean(config.whatsapp.accessToken && config.whatsapp.phoneNumberId),
+    whatsappAccessTemplate: Boolean(config.whatsapp.accessTemplateName),
     adminAuth: Boolean(config.adminPasswordHash),
   };
 }

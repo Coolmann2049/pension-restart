@@ -55,7 +55,7 @@ const DIALOGUE = [
   },
   {
     speaker: "guide",
-    text: "Call ke baad aapko ek written summary, document checklist aur suitable official routes milenge. Demo reference PR-2608-1042 taiyaar hai.",
+    text: "Call ke baad aapko ek written summary, document checklist aur suitable official routes milenge. Aapka chhe ankon ka demo code 260810 taiyaar hai.",
   },
 ];
 
