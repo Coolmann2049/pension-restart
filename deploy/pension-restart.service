@@ -1,0 +1,21 @@
+[Unit]
+Description=Pension Restart web and guidance service
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/pension-restart
+EnvironmentFile=/var/www/pension-restart/.env
+ExecStart=/usr/bin/node /var/www/pension-restart/server.js
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/www/pension-restart/data
+
+[Install]
+WantedBy=multi-user.target

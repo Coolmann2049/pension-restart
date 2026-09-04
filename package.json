@@ -1,0 +1,26 @@
+{
+  "name": "pension-restart",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Elderly-first, cross-channel pension guidance and case continuity.",
+  "scripts": {
+    "build": "esbuild src/browser-call-entry.js --bundle --minify --format=iife --outfile=assets/browser-call.bundle.js",
+    "dev": "node --watch server.js",
+    "start": "node server.js",
+    "test": "node --test",
+    "check": "node --check server.js && node --check app.js && node --check admin.js",
+    "hash-password": "node scripts/hash-password.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@vapi-ai/web": "^2.7.0",
+    "better-sqlite3": "^13.0.3",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

@@ -1,35 +1,38 @@
-# Pension Restart — Build notes
+# Pension Restart — implementation notes
 
-## Completed phases
+## Completed product layers
 
-1. **Foundation** — Static, dependency-free SPA; hash routing; deterministic local state.
-2. **Public website** — Long-form elderly-first homepage, pension education, safety guidance and life-certificate routes.
-3. **Guided call** — Scripted bilingual ElevenLabs recording, exact timestamp-synchronized bubbles and deterministic case extraction.
-4. **Online alternative** — Six-step form with review branch and plain-language choices.
-5. **Documents** — Synthetic filename attachments, receipt state and explicit no-upload disclosure.
-6. **Case experience** — Timeline, evidence, review response, route choice, synthetic successful outcome and JSON export.
-7. **Supporting views** — Family dashboard, status lookup, help centre and prototype disclosure.
-8. **QA and polish** — Desktop/mobile browser testing, larger-text mode, responsive navigation, FAQ state, route audit and image compression.
+1. Public, responsive, elderly-first pension education and safety experience.
+2. Express runtime serving both the frontend and JSON/webhook APIs.
+3. SQLite data model for cases, channel identities, conversations, raw transcript turns, fact events and deterministic resolutions.
+4. One-question-at-a-time intake shared by web, Vapi and Meta WhatsApp.
+5. Constrained OpenAI answer interpretation with conservative local fallback.
+6. Append-only corrections: prior values remain visible as superseded events.
+7. Deterministic routing across central civil, defence, railway, EPS-95, NPS/UPS/APY, state-government, social-assistance, private-annuity and employer-superannuation families.
+8. Vapi phone/browser-call assistant generator and webhook tool contract.
+9. Meta WhatsApp webhook verification, interactive messages and same-number continuation.
+10. Password-protected live operations panel driven by Server-Sent Events.
+11. Cross-channel case-code claiming plus automatic same-channel reconnection.
+12. Nginx/systemd deployment examples and automated state-machine/provider-contract tests.
 
-## Deterministic demo fixture
+## Current boundary
 
-- Case: `PR-2608-1042`
-- Pensioner: Kamla Devi
-- Last pension credit: November 2025
-- First missing credit: December 2025
-- Suggested possibility: missed annual life certificate, explicitly unconfirmed
-- Requested demo references: synthetic PPO first page and redacted pension-credit record
+Pension Restart gathers information and prepares guidance. It does not authenticate a pensioner, generate a Digital Life Certificate, submit a grievance, inspect an official pension record or confirm a payment. The document upload/review screens inherited from the original submission remain synthetic until a reviewed storage and retention design is approved.
 
-## Judge path
+## Two-minute judge path
 
-1. Select **Simulate a call** on the homepage.
-2. Start the transcript, then use the skip control if time is short.
-3. Open the written summary and confirm it.
-4. Attach the PPO and pension-record demo files.
-5. Send them, open the case, and reveal the simulated review response.
-6. Compare official routes or reveal the clearly labelled synthetic successful outcome.
-7. Open **About** to show exactly what is working, simulated and future work.
+1. Start `/admin` on one side of the screen.
+2. Call the Vapi number (or use the browser microphone fallback).
+3. Answer in Hinglish and show each raw phrase, interpreted fact and progress event appearing live.
+4. Give an ambiguous pension-family answer and show the assistant clarify rather than guess.
+5. Correct one fact during final readback and show the superseded value in history.
+6. Confirm the readback and show the deterministic route and official escalation authority.
+7. Open WhatsApp, send the case code, and continue the same case.
+8. Close on the public safety/independence statement: guidance, no government impersonation, no sensitive credentials.
 
-## Production boundary
+## Remaining provider-dependent verification
 
-The prototype does not use OpenAI Realtime, speech recognition, telephony, document parsing, email delivery or government integrations. Those are deliberately deferred. Its call demonstration uses one pre-generated ElevenLabs MP3 and fixed transcript timestamps; no audio is recorded or interpreted. The working submission demonstrates the proposed journey and its safety boundaries without pretending that infrastructure exists.
+- Apply the assistant payload to the actual Vapi organization and place a real inbound call.
+- Validate Hindi/Hinglish speech recognition against the selected Vapi transcriber and voice.
+- Complete Meta webhook verification and send/receive tests with the production WhatsApp number.
+- Verify public-key origin restrictions and rotate any credential shown during the demo.
