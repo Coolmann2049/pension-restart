@@ -44,7 +44,7 @@ WHATSAPP_ACCESS_TEMPLATE_LINK_TARGET=your pension guidance case
 
 Generate each random secret independently with `openssl rand -hex 32`.
 
-## 2. Install and start
+## 2. Install and start with PM2
 
 The repository should live at `/var/www/pension-restart`. Install Node.js 20 or newer, then run:
 
@@ -53,14 +53,17 @@ cd /var/www/pension-restart
 npm ci
 npm run build
 npm test
-sudo install -d -o www-data -g www-data -m 750 /var/www/pension-restart/data
-sudo chown root:www-data /var/www/pension-restart/.env
-sudo chmod 640 /var/www/pension-restart/.env
-sudo cp deploy/pension-restart.service /etc/systemd/system/pension-restart.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now pension-restart
+mkdir -p /var/www/pension-restart/data
+chmod 750 /var/www/pension-restart/data
+npm install --global pm2
+pm2 startOrReload ecosystem.config.cjs --update-env
+pm2 save
 curl --fail http://127.0.0.1:3000/health
 ```
+
+Run PM2 as the same non-root deployment user each time. The application reads `/var/www/pension-restart/.env` itself. Keep `instances: 1`; the SQLite database and in-process live event stream are deliberately single-process.
+
+To survive a reboot, optionally run `pm2 startup`. PM2 prints one `sudo` command tailored to the current user; execute that generated command and then run `pm2 save` again.
 
 Copy `deploy/nginx.conf` to `/etc/nginx/sites-available/pension-restart`, enable it, test Nginx, and reload:
 
@@ -107,4 +110,4 @@ node scripts/configure-vapi.mjs --apply
 5. Confirm that `verify_account_2` arrives with the raw six-digit code and that its delivery state appears in the admin case.
 6. Enter either `123456` or `PR-123456` on the website continuation page and confirm it reconnects the same record.
 
-Use `journalctl -u pension-restart -f` for application errors and `/var/log/nginx/error.log` for proxy/TLS errors.
+Use `pm2 logs pension-restart` for application errors, `pm2 monit` for process state, and `/var/log/nginx/error.log` for proxy/TLS errors.

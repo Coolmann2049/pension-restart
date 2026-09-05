@@ -87,21 +87,20 @@ Tests cover case resume, one-question advancement, ambiguous answers, boolean UI
 
 ## Deployment
 
-Example files are in `deploy/`. On the server:
+The production process runs under PM2 in single-process fork mode because SQLite and the in-memory live event stream must not be clustered. Example files are in `deploy/`. On the server:
 
 ```bash
-sudo mkdir -p /var/www/pension-restart/data
-sudo chown -R www-data:www-data /var/www/pension-restart
-sudo cp deploy/pension-restart.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now pension-restart
+mkdir -p /var/www/pension-restart/data
+npm install --global pm2
+pm2 startOrReload ecosystem.config.cjs --update-env
+pm2 save
 sudo cp deploy/nginx.conf /etc/nginx/sites-available/pension-restart
 sudo ln -s /etc/nginx/sites-available/pension-restart /etc/nginx/sites-enabled/pension-restart
 sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-Adjust the paths/user in the service file first. Use Certbot (or your existing certificate workflow) for TLS before connecting provider webhooks.
+Use Certbot (or your existing certificate workflow) for TLS before connecting provider webhooks. The exact production sequence is in `deploy/GO-LIVE.md`.
 
 ## Safety boundary
 
