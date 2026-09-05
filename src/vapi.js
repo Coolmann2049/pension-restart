@@ -44,7 +44,7 @@ async function toolResult(tool, message) {
       }).case
       : record;
     return { name, toolCallId, result: JSON.stringify({
-      caseId: connected.id, publicCode: connected.publicCode, caseVersion: connected.version,
+      caseId: connected.id, publicCode: connected.publicCode, displayCode: connected.displayCode, caseVersion: connected.version,
       currentQuestionId: connected.currentQuestionId,
       currentFacts: Object.fromEntries(Object.entries(connected.facts).map(([field, fact]) => [field, fact.value])),
     }) };

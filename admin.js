@@ -51,7 +51,7 @@ function renderCases() {
     const name = record.facts.pensioner_name?.value || "Unnamed pensioner";
     const issue = record.facts.issue_type?.value || "Collecting the problem";
     return `<button class="case-feed-item ${record.id === selectedCaseId ? "selected" : ""}" data-case-id="${escapeHtml(record.id)}">
-      <span class="case-feed-top"><strong>${escapeHtml(record.publicCode)}</strong><small>${escapeHtml(time(record.updatedAt))}</small></span>
+      <span class="case-feed-top"><strong>${escapeHtml(record.displayCode || `PR-${record.publicCode}`)}</strong><small>${escapeHtml(time(record.updatedAt))}</small></span>
       <span class="case-feed-name">${escapeHtml(name)}</span>
       <span class="case-feed-bottom"><span>${channels(record).map(channel => `<i>${escapeHtml(channel)}</i>`).join("") || "web"}</span><em>${escapeHtml(displayValue(issue))}</em></span>
       <span class="case-progress"><i style="width:${record.completeness}%"></i></span>
@@ -65,7 +65,7 @@ function renderDetail(record) {
   const corrected = record.factHistory.filter(item => item.state === "superseded").length;
   detail.innerHTML = `
     <header class="case-detail-header">
-      <div><span class="eyebrow">${escapeHtml(record.publicCode)}</span><h1>${escapeHtml(record.facts.pensioner_name?.value || "Pension case")}</h1></div>
+      <div><span class="eyebrow">${escapeHtml(record.displayCode || `PR-${record.publicCode}`)}</span><h1>${escapeHtml(record.facts.pensioner_name?.value || "Pension case")}</h1></div>
       <span class="status-badge ${record.status === "guidance_prepared" ? "success" : ""}">${escapeHtml(displayValue(record.status))}</span>
     </header>
     <div class="case-meta"><span>${record.completeness}% complete</span><span>Version ${record.version}</span><span>${corrected} correction${corrected === 1 ? "" : "s"}</span></div>
@@ -110,7 +110,7 @@ function addEvent(event) {
 function connectStream() {
   stream?.close();
   stream = new EventSource("/api/admin/events");
-  const types = ["case.created", "case.connected", "conversation.connected", "answer.received", "answer.interpreting", "case.updated", "resolution.prepared", "transcript.final", "voice.status", "voice.ended", "notification.sent", "notification.failed", "whatsapp.outbound.preview", "integration.error"];
+  const types = ["case.created", "case.connected", "conversation.connected", "answer.received", "answer.interpreting", "case.updated", "resolution.prepared", "transcript.final", "voice.status", "voice.ended", "notification.accepted", "notification.status", "notification.failed", "whatsapp.outbound.preview", "integration.error"];
   for (const type of types) stream.addEventListener(type, message => {
     addEvent(JSON.parse(message.data));
     window.clearTimeout(connectStream.refresh);

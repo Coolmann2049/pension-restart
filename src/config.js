@@ -82,5 +82,9 @@ export function productionWarnings() {
   if (config.sessionSecret.startsWith("development-")) warnings.push("SESSION_SECRET uses the development default");
   if (config.caseCodeSecret.startsWith("development-")) warnings.push("CASE_CODE_SECRET uses the development default");
   if (!config.adminPasswordHash) warnings.push("ADMIN_PASSWORD_HASH is not configured");
+  if (!config.vapi.webhookSecret) warnings.push("VAPI_WEBHOOK_SECRET is not configured");
+  if (config.whatsapp.accessToken && !config.whatsapp.appSecret) warnings.push("META_APP_SECRET is required to verify WhatsApp webhook signatures");
+  if (config.whatsapp.accessToken && !config.whatsapp.verifyToken) warnings.push("WHATSAPP_VERIFY_TOKEN is not configured");
+  if (config.whatsapp.accessToken && !config.whatsapp.phoneNumberId) warnings.push("WHATSAPP_PHONE_NUMBER_ID is not configured");
   return warnings;
 }

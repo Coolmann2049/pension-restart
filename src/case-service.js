@@ -7,7 +7,7 @@ import { completion, nextQuestion, questionById } from "./questions.js";
 import { interpretAnswer, normalizeProposedFact } from "./interpreter.js";
 import { resolveGuidance } from "./guidance-engine.js";
 import { publish } from "./realtime.js";
-import { redactSensitiveText } from "./util.js";
+import { displayCaseCode, redactSensitiveText } from "./util.js";
 
 export function createOrResumeCase({ channel = "web", identityKey = "", externalConversationId, language = "" }) {
   let record = identityKey ? findCaseByIdentity(channel, identityKey) : null;
@@ -33,6 +33,8 @@ export function connectConversationByCode({ publicCode, channel, identityKey = "
   const compact = supplied.replace(/[^A-Z0-9]/g, "");
   const normalized = /^\d{6}$/.test(compact)
     ? compact
+    : /^PR\d{6}$/.test(compact)
+      ? compact.slice(2)
     : compact.startsWith("PR") && compact.length === 12
       ? `PR-${compact.slice(2, 6)}-${compact.slice(6)}`
       : supplied;
@@ -142,6 +144,7 @@ export async function submitAnswer({
     publish("resolution.prepared", { caseId: before.id, publicCode: before.publicCode, resolution });
     return {
       accepted: true, complete: true, caseId: before.id, publicCode: before.publicCode,
+      displayCode: displayCaseCode(before.publicCode),
       caseVersion: completed.version, interpretationProvider: interpretation.provider,
       acceptedFacts: accepted.map(item => ({ field: item.field, value: item.value, confidence: item.confidence })),
       resolution,
@@ -186,6 +189,7 @@ export async function submitAnswer({
     complete: false,
     caseId: before.id,
     publicCode: before.publicCode,
+    displayCode: displayCaseCode(before.publicCode),
     caseVersion: progress.version,
     completeness: progress.completeness,
     interpretationProvider: interpretation.provider,

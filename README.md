@@ -56,12 +56,12 @@ The second command creates or updates the assistant and, when `VAPI_PHONE_NUMBER
 
 1. In Meta for Developers, create a **Business** app, add **WhatsApp**, and connect the WABA/production phone number. Copy the app secret, phone-number ID and WABA ID.
 2. In Business Settings, create a system user, assign the app and WhatsApp account, and generate a permanent token with `whatsapp_business_messaging` and `whatsapp_business_management`.
-3. In WhatsApp Manager, open **Message templates → Create template → Browse template library**, select `verify_account_2`, and note its exact language code. Do not edit its fixed wording.
-4. The four variables are sent as `accessing`, `Pension Restart`, `your pension guidance case`, and the generated six-digit code. Set `WHATSAPP_ACCESS_TEMPLATE_NAME=verify_account_2` and the exact approved language in `.env`.
+3. In WhatsApp Manager, select the library template `verify_account_2` and note its exact language code. This hackathon build intentionally depends on that fixed library template.
+4. The four variables are sent as `accessing`, `Pension Restart`, `your pension guidance case`, and the generated six-digit access code. Set `WHATSAPP_ACCESS_TEMPLATE_NAME=verify_account_2` and the exact approved language in `.env`.
 5. Set the callback URL to `https://YOUR_DOMAIN/webhooks/whatsapp`, use the same random value as `WHATSAPP_VERIFY_TOKEN`, and subscribe the app to `messages`.
 6. Add the remaining WhatsApp values to `.env`, restart the service, and call the helpline while consenting to the WhatsApp follow-up.
 
-The end-of-call webhook sends `verify_account_2` only after explicit consent. A user can enter the delivered six digits on the website, speak them on a later call, or send them as the first WhatsApp message. Successful entry verifies that channel identity and joins it to the existing case.
+The end-of-call webhook sends `verify_account_2` only after explicit consent. Meta receives the raw six digits, such as `123456`; the website, admin panel and phone assistant display the branded case reference `PR-123456`. Either form reconnects the same case.
 
 ## Architecture
 

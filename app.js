@@ -33,7 +33,7 @@ const app = document.querySelector("#app");
 const toast = document.querySelector("#toast");
 
 const caseData = {
-  id: "260810",
+  id: "PR-260810",
   pensioner: "Kamla Devi",
   lastCredit: "November 2025",
   firstMissing: "December 2025",
@@ -54,7 +54,7 @@ const callScript = [
   { who: "caller", name: "Kamla Devi", text: "Mujhe yaad nahi. Shayad nahi kiya." },
   { who: "guide", name: "Pension guide", text: "Aapki baat se lagta hai ki life certificate miss hua ho sakta hai. Yeh final decision nahi hai. PPO ka pehla panna aur redacted pension statement madad kar sakte hain. Aadhaar ki photo upload mat kijiye." },
   { who: "caller", name: "Kamla Devi", text: "Mujhe ab kya karna hoga?" },
-  { who: "guide", name: "Pension guide", text: "Call ke baad aapko ek written summary, document checklist aur suitable official routes milenge. Aapka chhe ankon ka demo code 260810 taiyaar hai." },
+  { who: "guide", name: "Pension guide", text: "Call ke baad aapko ek written summary, document checklist aur suitable official routes milenge. Aapka Pension Restart reference PR-260810 taiyaar hai. Iska access code 260810 hai." },
 ];
 
 function loadState() {
@@ -102,6 +102,8 @@ function pageHero(eyebrow, title, copy, extra = "") {
 function homeView() {
   const phone = runtimeConfig.phoneNumber || "Number being connected";
   const phoneHref = runtimeConfig.phoneNumber ? `tel:${runtimeConfig.phoneNumber.replace(/[^+\d]/g, "")}` : "#/call";
+  const whatsappDigits = String(runtimeConfig.whatsappNumber || "").replace(/\D/g, "");
+  const whatsappHref = whatsappDigits ? `https://wa.me/${whatsappDigits}?text=${encodeURIComponent("Namaste, I need pension guidance")}` : "";
   return `
     <section class="hero">
       <div class="hero-grid">
@@ -114,6 +116,7 @@ function homeView() {
           <p class="hero-note">Independent AI guidance — not a government helpline. International calling charges may apply.</p>
           <div class="hero-actions">
             <a class="button button-primary" href="#/call">☎ Talk to the voice guide</a>
+            ${whatsappHref ? `<a class="button button-outline" href="${whatsappHref}" target="_blank" rel="noopener">Continue on WhatsApp</a>` : ""}
             <a class="button button-quiet" href="#/online">Continue online instead</a>
           </div>
           <div class="hero-safety"><span class="shield-dot"></span>Never share an Aadhaar number, bank or government OTP, PIN, CVV, full account number or bank password.</div>
@@ -319,8 +322,8 @@ function onlineView() {
     <section class="section section-tight"><div class="form-shell center"><span class="live-loader"></span><h2>Preparing your private case…</h2><p class="muted">No government, Aadhaar or bank system is being contacted.</p></div></section>`;
   if (webCase.complete && webCase.resolution) {
     const plan = webCase.resolution;
-    return `${pageHero("Guidance prepared", `Your six-digit code is ${webCase.publicCode}.`, "Keep this code to continue through phone, WhatsApp or this browser.", '<span class="status-badge success">Guidance ready</span>')}
-      <section class="section section-tight"><div class="container summary-grid"><article class="summary-card"><span class="eyebrow">Likely explanation</span><h2>${escapeAttr(plan.likelyCause)}</h2><p class="muted">Confidence: ${escapeAttr(plan.confidence)} · ${plan.requiresHumanReview ? "Human review recommended" : "Matched to a deterministic guidance route"}</p><ol class="guidance-steps">${plan.nextSteps.map(step => `<li>${escapeAttr(step)}</li>`).join("")}</ol><div class="callout danger"><strong>Guidance, not a government decision</strong><p>${escapeAttr(plan.disclaimer)}</p></div></article><aside class="summary-card"><h2>Where to go</h2><dl class="detail-list">${detailRow("First contact", plan.primaryAuthority)}${detailRow("Escalation", plan.escalationAuthority)}${detailRow("Six-digit code", webCase.publicCode)}</dl><h3>Helpful documents</h3><ul>${plan.documents.map(item => `<li>${escapeAttr(item)}</li>`).join("")}</ul><a class="button button-outline button-block" href="/admin">View in operations</a></aside></div></section>`;
+    return `${pageHero("Guidance prepared", `Your case is ${displayCaseCode(webCase)}.`, `Keep access code ${webCase.publicCode} to continue through phone, WhatsApp or this browser.`, '<span class="status-badge success">Guidance ready</span>')}
+      <section class="section section-tight"><div class="container summary-grid"><article class="summary-card"><span class="eyebrow">Likely explanation</span><h2>${escapeAttr(plan.likelyCause)}</h2><p class="muted">Confidence: ${escapeAttr(plan.confidence)} · ${plan.requiresHumanReview ? "Human review recommended" : "Matched to a deterministic guidance route"}</p><ol class="guidance-steps">${plan.nextSteps.map(step => `<li>${escapeAttr(step)}</li>`).join("")}</ol><div class="callout danger"><strong>Guidance, not a government decision</strong><p>${escapeAttr(plan.disclaimer)}</p></div></article><aside class="summary-card"><h2>Where to go</h2><dl class="detail-list">${detailRow("First contact", plan.primaryAuthority)}${detailRow("Escalation", plan.escalationAuthority)}${detailRow("Case reference", displayCaseCode(webCase))}${detailRow("Access code", webCase.publicCode)}</dl><h3>Helpful documents</h3><ul>${plan.documents.map(item => `<li>${escapeAttr(item)}</li>`).join("")}</ul><a class="button button-outline button-block" href="/admin">View in operations</a></aside></div></section>`;
   }
   const question = webCase.nextQuestion;
   const options = webQuestionOptions[question?.id] || [];
@@ -330,13 +333,13 @@ function onlineView() {
     ["disbursing_institution", "Paying institution"], ["last_credit_date", "Last payment"],
     ["pension_amount", "Monthly amount"], ["life_certificate_status", "Life certificate"], ["changed_details", "Changed details"],
   ];
-  if (webCase.awaitingCorrection) return `${pageHero("Correct one detail", "Which answer should we change?", "The previous value stays in the audit history and the corrected value becomes current.", `<span class="status-badge neutral">${escapeAttr(webCase.publicCode)}</span>`)}
+  if (webCase.awaitingCorrection) return `${pageHero("Correct one detail", "Which answer should we change?", "The previous value stays in the audit history and the corrected value becomes current.", `<span class="status-badge neutral">${escapeAttr(displayCaseCode(webCase))}</span>`)}
     <section class="section section-tight"><form class="form-shell" id="web-correction-form"><label for="web-correction-field"><strong>Detail to correct</strong></label><select id="web-correction-field" class="answer-input" required><option value="">Choose one detail</option>${correctionOptions.map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}</select><label for="web-correction-answer"><strong>Correct answer</strong></label><textarea id="web-correction-answer" class="answer-input" rows="4" required placeholder="Enter only the corrected answer…"></textarea><button class="button button-primary" type="submit">Save correction</button><p class="admin-error" id="web-answer-error" role="alert"></p></form></section>`;
-  return `${pageHero("Continue online", "One question at a time.", "Your answer is stored in the same case engine used by phone and WhatsApp.", `<span class="status-badge neutral">${escapeAttr(webCase.publicCode)}</span>`)}
+  return `${pageHero("Continue online", "One question at a time.", "Your answer is stored in the same case engine used by phone and WhatsApp.", `<span class="status-badge neutral">${escapeAttr(displayCaseCode(webCase))}</span>`)}
     <section class="section section-tight">
       <form class="form-shell" id="live-online-form">
         <div class="web-case-progress"><span style="width:${webCase.completeness || 0}%"></span></div>
-        <p class="muted">${webCase.completeness || 0}% complete · Case ${escapeAttr(webCase.publicCode)}</p>
+        <p class="muted">${webCase.completeness || 0}% complete · Case ${escapeAttr(displayCaseCode(webCase))}</p>
         <div class="question"><h2>${escapeAttr(question?.en || "Your guidance is being prepared")}</h2><p class="muted">${escapeAttr(question?.hi || "")}</p></div>
         ${options.length ? `<div class="choice-grid">${options.map(([value, label]) => `<button class="choice web-answer-option" data-answer="${escapeAttr(value)}" type="button"><span class="choice-dot"></span><span>${escapeAttr(label)}</span></button>`).join("")}</div>` : `<label class="sr-only" for="web-raw-answer">Your answer</label><textarea id="web-raw-answer" class="answer-input" rows="4" required placeholder="Answer in your own words…"></textarea><button class="button button-primary" type="submit">Save and continue</button>`}
         <div class="callout danger compact"><strong>Never enter a bank or government OTP, PIN, password, Aadhaar number or complete bank account number.</strong></div>
@@ -479,7 +482,7 @@ function statusView() {
     <section class="section section-tight">
       <div class="form-shell">
         <label for="status-id"><strong>Six-digit Pension Restart code</strong></label>
-        <input id="status-id" value="${escapeAttr(caseFromLink)}" placeholder="6-digit code" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" style="width:100%;margin:12px 0 18px;padding:16px;border:2px solid var(--line);border-radius:14px" />
+        <input id="status-id" value="${escapeAttr(caseFromLink)}" placeholder="PR-123456 or 123456" maxlength="9" autocomplete="one-time-code" style="width:100%;margin:12px 0 18px;padding:16px;border:2px solid var(--line);border-radius:14px" />
         <button class="button button-primary" id="check-status" type="button">Connect this case</button>
         <div id="status-result"></div>
       </div>
@@ -606,7 +609,7 @@ function bindViewEvents(route) {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || "Case not found");
       webCase = body;
-      result.innerHTML = `<div class="spacer-md"></div><div class="callout success"><strong>Case ${escapeAttr(body.publicCode)} connected.</strong><p>${body.complete ? "Its guidance plan is ready." : `${body.completeness || 0}% of the guidance intake is complete.`}</p><a class="text-link" href="#/online">Continue this case</a></div>`;
+      result.innerHTML = `<div class="spacer-md"></div><div class="callout success"><strong>Case ${escapeAttr(displayCaseCode(body))} connected.</strong><p>${body.complete ? "Its guidance plan is ready." : `${body.completeness || 0}% of the guidance intake is complete.`}</p><a class="text-link" href="#/online">Continue this case</a></div>`;
     } catch (error) {
       result.innerHTML = `<div class="spacer-md"></div><div class="callout danger"><strong>We could not connect that case.</strong><p>${escapeAttr(error.message)}</p></div>`;
     }
@@ -984,7 +987,11 @@ function downloadRecord() {
 }
 
 function escapeAttr(value) {
-  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  return String(value ?? "").replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function displayCaseCode(record) {
+  return record?.displayCode || (record?.publicCode ? `PR-${record.publicCode}` : "PR-000000");
 }
 
 window.addEventListener("hashchange", render);

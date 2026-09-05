@@ -14,7 +14,7 @@ process.env.WHATSAPP_ACCESS_TEMPLATE_LANGUAGE = "en";
 delete process.env.OPENAI_API_KEY;
 
 const { connectConversationByCode, createOrResumeCase, submitAnswer } = await import("../src/case-service.js");
-const { commitFact, findCaseByIdentity, getCaseRecord, hydrateCase } = await import("../src/db.js");
+const { beginNotification, commitFact, findCaseByIdentity, finishNotification, getCaseRecord, hydrateCase } = await import("../src/db.js");
 const { resolveGuidance } = await import("../src/guidance-engine.js");
 const { handleVapiWebhook } = await import("../src/vapi.js");
 const { buildCaseAccessTemplate, processWhatsAppPayload } = await import("../src/whatsapp.js");
@@ -32,6 +32,7 @@ test("creates a resumable case for the same channel identity", () => {
   assert.equal(second.resumed, true);
   assert.equal(second.case.id, first.case.id);
   assert.match(first.case.publicCode, /^\d{6}$/);
+  assert.equal(first.case.displayCode, `PR-${first.case.publicCode}`);
   assert.equal(second.nextQuestion.id, "caller_relation");
 });
 
@@ -54,6 +55,15 @@ test("moves a new channel conversation onto an existing case code", () => {
   assert.equal(connected.case.id, website.case.id);
   assert.equal(findCaseByIdentity("voice", "+919555555555").id, website.case.id);
   assert.equal(getCaseRecord(temporaryCaseId), null);
+});
+
+test("accepts the branded PR-123456 form of a six-digit case code", () => {
+  const target = createOrResumeCase({ channel: "web", identityKey: "brand-source", externalConversationId: "brand-source-conversation" });
+  const connected = connectConversationByCode({
+    publicCode: `PR-${target.case.publicCode}`, channel: "voice", identityKey: "+919500000001",
+    accessSubject: "+919500000001",
+  });
+  assert.equal(connected.case.id, target.case.id);
 });
 
 test("rate limits repeated invalid six-digit code attempts", () => {
@@ -228,6 +238,17 @@ test("WhatsApp connects an existing code without interpreting the code as an ans
   assert.ok(linked.conversations.some(conversation => conversation.channel === "whatsapp"));
   assert.equal(linked.facts.caller_relation, undefined);
   assert.ok(linked.messages.some(message => message.content === "Shared Pension Restart case code"));
+});
+
+test("WhatsApp delivery receipts update the matching outbound notification", async () => {
+  const target = createOrResumeCase({ channel: "voice", identityKey: "+919400000001", externalConversationId: "delivery-source" });
+  const kind = "case-access-code:verify_account_2:en";
+  assert.equal(beginNotification({ caseId: target.case.id, channel: "whatsapp", kind }), true);
+  finishNotification({ caseId: target.case.id, channel: "whatsapp", kind, status: "accepted", providerMessageId: "wamid.delivery-test" });
+  await processWhatsAppPayload({ entry: [{ changes: [{ value: {
+    statuses: [{ id: "wamid.delivery-test", status: "delivered", timestamp: "1788556800", recipient_id: "919400000001" }],
+  } }] }] });
+  assert.equal(hydrateCase(target.case.id).notifications[0].status, "delivered");
 });
 
 test("redacts sensitive identity and credential patterns before storage", () => {

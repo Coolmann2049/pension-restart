@@ -70,7 +70,7 @@ app.post("/api/cases", (request, response) => {
     language: request.body?.language || "",
   });
   response.status(result.resumed ? 200 : 201).json({
-    caseId: result.case.id, publicCode: result.case.publicCode, caseVersion: result.case.version,
+    caseId: result.case.id, publicCode: result.case.publicCode, displayCode: result.case.displayCode, caseVersion: result.case.version,
     resumed: result.resumed, completeness: result.case.completeness, facts: result.case.facts,
     nextQuestion: result.nextQuestion && { id: result.nextQuestion.id, en: result.nextQuestion.en, hi: result.nextQuestion.hi },
   });
@@ -85,7 +85,7 @@ app.post("/api/cases/claim", (request, response, next) => {
       accessSubject: `${identityKey}:${request.ip}`,
     });
     response.json({
-      caseId: result.case.id, publicCode: result.case.publicCode, caseVersion: result.case.version,
+      caseId: result.case.id, publicCode: result.case.publicCode, displayCode: result.case.displayCode, caseVersion: result.case.version,
       completeness: result.case.completeness, complete: result.case.status === "guidance_prepared",
       resolution: result.case.resolution,
       nextQuestion: result.nextQuestion && { id: result.nextQuestion.id, en: result.nextQuestion.en, hi: result.nextQuestion.hi },

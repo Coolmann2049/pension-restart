@@ -33,6 +33,12 @@ export function publicCaseCode() {
   return String(crypto.randomInt(100_000, 1_000_000));
 }
 
+export function displayCaseCode(value = "") {
+  const compact = String(value).trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (/^\d{6}$/.test(compact)) return `PR-${compact}`;
+  return String(value).trim().toUpperCase();
+}
+
 export function accessSubjectHash(secret, channel, subject) {
   return crypto.createHmac("sha256", secret).update(`${channel}:${subject}`).digest("hex");
 }

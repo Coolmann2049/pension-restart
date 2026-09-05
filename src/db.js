@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { config } from "./config.js";
-import { accessSubjectHash, id, now, publicCaseCode, safeJson } from "./util.js";
+import { accessSubjectHash, displayCaseCode, id, now, publicCaseCode, safeJson } from "./util.js";
 
 fs.mkdirSync(path.dirname(config.databasePath), { recursive: true });
 export const db = new Database(config.databasePath);
@@ -196,6 +196,9 @@ const statements = {
   finishNotification: db.prepare(`UPDATE notifications SET status = @status, provider_message_id = @providerMessageId,
     error = @error, updated_at = @at WHERE case_id = @caseId AND channel = @channel AND kind = @kind`),
   notificationsForCase: db.prepare("SELECT * FROM notifications WHERE case_id = ? ORDER BY created_at"),
+  notificationByProviderId: db.prepare("SELECT * FROM notifications WHERE provider_message_id = ?"),
+  updateNotificationProviderStatus: db.prepare(`UPDATE notifications SET status = @status, error = @error, updated_at = @at
+    WHERE provider_message_id = @providerMessageId`),
   legacyCases: db.prepare("SELECT id, public_code FROM cases WHERE public_code NOT GLOB '[0-9][0-9][0-9][0-9][0-9][0-9]'"),
   insertCodeAlias: db.prepare("INSERT OR IGNORE INTO case_code_aliases (legacy_code, case_id, created_at) VALUES (?, ?, ?)"),
   updatePublicCode: db.prepare("UPDATE cases SET public_code = ?, updated_at = ? WHERE id = ?"),
@@ -227,6 +230,7 @@ function mapCase(row) {
   return {
     id: row.id,
     publicCode: row.public_code,
+    displayCode: displayCaseCode(row.public_code),
     status: row.status,
     currentQuestionId: row.current_question_id,
     completeness: row.completeness,
@@ -375,6 +379,13 @@ export function beginNotification({ caseId, channel, kind, recipientMasked = "" 
 
 export function finishNotification({ caseId, channel, kind, status, providerMessageId = null, error = null }) {
   statements.finishNotification.run({ caseId, channel, kind, status, providerMessageId, error, at: now() });
+}
+
+export function updateNotificationByProviderId({ providerMessageId, status, error = null }) {
+  const notification = statements.notificationByProviderId.get(providerMessageId);
+  if (!notification) return null;
+  statements.updateNotificationProviderStatus.run({ providerMessageId, status, error, at: now() });
+  return { ...notification, status, error };
 }
 
 export function hydrateCase(caseIdOrCode) {

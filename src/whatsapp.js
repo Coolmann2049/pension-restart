@@ -1,12 +1,13 @@
 import crypto from "node:crypto";
 import { config } from "./config.js";
 import {
-  addAudit, addMessage, beginNotification, finishNotification, hydrateCase, recordWebhook, updateCaseProgress,
+  addAudit, addMessage, beginNotification, finishNotification, hydrateCase, recordWebhook,
+  updateCaseProgress, updateNotificationByProviderId,
 } from "./db.js";
 import { connectConversationByCode, createOrResumeCase, submitAnswer } from "./case-service.js";
 import { questionById } from "./questions.js";
 import { publish } from "./realtime.js";
-import { normalizePhone, redactPhone, redactSensitiveText, timingSafeEqualText } from "./util.js";
+import { displayCaseCode, normalizePhone, redactPhone, redactSensitiveText, timingSafeEqualText } from "./util.js";
 
 const BUTTON_OPTIONS = {
   caller_relation: [["self", "My pension"], ["child", "Parent's pension"], ["helper", "Helping someone"]],
@@ -22,7 +23,7 @@ const LIST_OPTIONS = {
   scheme_family: [
     ["central_civil", "Central government"], ["defence", "Defence / SPARSH"], ["railways", "Railways"],
     ["eps_95", "EPFO / EPS-95"], ["nps_ups_apy", "NPS / UPS / APY"], ["state_government", "State government"],
-    ["social_assistance", "Old age / widow / disability"], ["private_annuity", "Insurance annuity"],
+    ["social_assistance", "Social assistance"], ["private_annuity", "Insurance annuity"],
     ["employer_superannuation", "Employer pension"], ["unknown", "I am not sure"],
   ],
   life_certificate_method: [
@@ -54,6 +55,7 @@ async function graphSend(to, body) {
     method: "POST",
     headers: { Authorization: `Bearer ${config.whatsapp.accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({ messaging_product: "whatsapp", recipient_type: "individual", to, ...body }),
+    signal: AbortSignal.timeout(15_000),
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(`WhatsApp returned ${response.status}: ${JSON.stringify(payload).slice(0, 400)}`);
@@ -93,9 +95,9 @@ export async function sendCaseAccessTemplate({ to, record }) {
   try {
     const result = await graphSend(normalized, buildCaseAccessTemplate(record));
     const providerMessageId = result.messages?.[0]?.id || null;
-    finishNotification({ caseId: record.id, channel: "whatsapp", kind, status: "sent", providerMessageId });
-    addAudit(record.id, "notification.sent", { channel: "whatsapp", kind, providerMessageId });
-    publish("notification.sent", { caseId: record.id, publicCode: record.publicCode, channel: "whatsapp", kind });
+    finishNotification({ caseId: record.id, channel: "whatsapp", kind, status: "accepted", providerMessageId });
+    addAudit(record.id, "notification.accepted", { channel: "whatsapp", kind, providerMessageId });
+    publish("notification.accepted", { caseId: record.id, publicCode: record.publicCode, displayCode: record.displayCode, channel: "whatsapp", kind });
     return { sent: true, providerMessageId };
   } catch (error) {
     finishNotification({ caseId: record.id, channel: "whatsapp", kind, status: "failed", error: error.message.slice(0, 500) });
@@ -137,6 +139,14 @@ function inboundMessages(payload) {
   return messages;
 }
 
+function deliveryStatuses(payload) {
+  const statuses = [];
+  for (const entry of payload.entry || []) for (const change of entry.changes || []) {
+    for (const status of change.value?.statuses || []) statuses.push(status);
+  }
+  return statuses;
+}
+
 function answerFromMessage(message) {
   const interactive = message.interactive?.button_reply || message.interactive?.list_reply;
   if (interactive?.id?.startsWith("correct:")) {
@@ -147,7 +157,10 @@ function answerFromMessage(message) {
     return { questionId, rawAnswer: redactSensitiveText(valueParts.join(":")), confirmed: true };
   }
   const originalAnswer = message.text?.body || message.button?.text || "";
-  return { rawAnswer: redactSensitiveText(originalAnswer), originalAnswer: String(originalAnswer) };
+  return {
+    rawAnswer: redactSensitiveText(originalAnswer), originalAnswer: String(originalAnswer),
+    unsupported: !["text", "interactive", "button"].includes(message.type),
+  };
 }
 
 function suppliedCaseCode(value = "") {
@@ -171,12 +184,36 @@ function correctionMessage() {
 }
 
 export async function processWhatsAppPayload(payload) {
+  for (const status of deliveryStatuses(payload)) {
+    const eventType = `status:${status.status || "unknown"}:${status.timestamp || ""}`;
+    if (!recordWebhook("whatsapp", status.id || crypto.randomUUID(), eventType)) continue;
+    const error = status.errors?.map(item => item.message || item.title || item.code).join("; ") || null;
+    const notification = status.id ? updateNotificationByProviderId({
+      providerMessageId: status.id, status: status.status || "unknown", error,
+    }) : null;
+    if (notification?.case_id) addAudit(notification.case_id, "notification.status", {
+      channel: "whatsapp", providerMessageId: status.id, status: status.status, error,
+    });
+    publish("notification.status", {
+      caseId: notification?.case_id || null, channel: "whatsapp",
+      providerMessageId: status.id || null, status: status.status || "unknown", error,
+    });
+  }
+
   for (const { message, contact } of inboundMessages(payload)) {
     if (!recordWebhook("whatsapp", message.id, "message")) continue;
     const waId = message.from;
     const answer = answerFromMessage(message);
     let existing = createOrResumeCase({ channel: "whatsapp", identityKey: waId, externalConversationId: `wa:${waId}` });
     let record = hydrateCase(existing.case.id);
+    if (answer.unsupported) {
+      addMessage({
+        caseId: record.id, conversationId: existing.conversation.id, externalId: message.id,
+        role: "user", content: `[Unsupported WhatsApp ${message.type || "message"}]`,
+      });
+      await graphSend(waId, { type: "text", text: { body: "Please reply using text or the buttons shown. Voice notes and documents are not accepted in this guidance chat yet." } });
+      continue;
+    }
     const suppliedCode = !record.messages.length && !Object.keys(record.facts).length
       ? suppliedCaseCode(answer.originalAnswer || answer.rawAnswer)
       : "";
@@ -202,9 +239,9 @@ export async function processWhatsAppPayload(payload) {
     }
     if (linkedByCode) {
       addMessage({ caseId: record.id, conversationId: existing.conversation.id, externalId: message.id, role: "user", content: "Shared Pension Restart case code" });
-      await graphSend(waId, { type: "text", text: { body: `Code ${record.publicCode} is verified and this pension case is now connected to your WhatsApp number.` } });
+      await graphSend(waId, { type: "text", text: { body: `Code ${displayCaseCode(record.publicCode)} is verified and this pension case is now connected to your WhatsApp number.` } });
       if (record.resolution) {
-        await graphSend(waId, { type: "text", text: { body: `${record.resolution.likelyCause}\n\nCase: ${record.publicCode}` } });
+        await graphSend(waId, { type: "text", text: { body: `${record.resolution.likelyCause}\n\nCase: ${displayCaseCode(record.publicCode)}` } });
       } else {
         const current = existing.nextQuestion || questionById(record.currentQuestionId);
         if (current) await graphSend(waId, questionMessage(current));
@@ -215,7 +252,7 @@ export async function processWhatsAppPayload(payload) {
       addMessage({ caseId: record.id, conversationId: existing.conversation.id, externalId: message.id, role: "user", content: answer.rawAnswer || "Started WhatsApp guidance" });
       publish("transcript.final", { caseId: record.id, publicCode: record.publicCode, role: "user", transcript: answer.rawAnswer, channel: "whatsapp", profileName: contact?.profile?.name });
       const first = existing.nextQuestion || questionById(record.currentQuestionId);
-      await graphSend(waId, { type: "text", text: { body: `Namaste. Your Pension Restart code is ${record.publicCode}. You may use this six-digit code only with Pension Restart. Never send a bank or government OTP, PIN, password, Aadhaar number or full bank-account number here.` } });
+      await graphSend(waId, { type: "text", text: { body: `Namaste. Your Pension Restart case is ${displayCaseCode(record.publicCode)}. Its six-digit access code is ${record.publicCode}. Never send a bank or government OTP, PIN, password, Aadhaar number or full bank-account number here.` } });
       await graphSend(waId, questionMessage(first));
       continue;
     }
@@ -245,7 +282,7 @@ export async function processWhatsAppPayload(payload) {
     });
     publish("transcript.final", { caseId: record.id, publicCode: record.publicCode, role: "user", transcript: answer.rawAnswer, channel: "whatsapp", profileName: contact?.profile?.name });
     if (result.complete) {
-      const lines = [result.resolution.likelyCause, "", ...result.resolution.nextSteps.map((step, index) => `${index + 1}. ${step}`), "", `Case: ${result.publicCode}`];
+      const lines = [result.resolution.likelyCause, "", ...result.resolution.nextSteps.map((step, index) => `${index + 1}. ${step}`), "", `Case: ${displayCaseCode(result.publicCode)}`];
       await graphSend(waId, { type: "text", text: { body: lines.join("\n") } });
     } else if (result.awaitingCorrection) {
       await graphSend(waId, correctionMessage());
@@ -258,6 +295,7 @@ export async function processWhatsAppPayload(payload) {
 }
 
 export function whatsappVerification(request, response) {
+  if (!config.whatsapp.verifyToken) return response.sendStatus(503);
   if (request.query["hub.mode"] === "subscribe" && request.query["hub.verify_token"] === config.whatsapp.verifyToken) {
     return response.status(200).send(request.query["hub.challenge"]);
   }
