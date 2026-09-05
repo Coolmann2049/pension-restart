@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "facts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "type": "string",
+            "enum": [
+              "caller_relation",
+              "whatsapp_followup_consent",
+              "pensioner_name",
+              "issue_type",
+              "scheme_family",
+              "scheme_name",
+              "former_employer",
+              "disbursement_channel",
+              "disbursing_institution",
+              "last_credit_date",
+              "pension_amount",
+              "life_certificate_status",
+              "life_certificate_method",
+              "life_certificate_receipt_available",
+              "changed_details",
+              "location_state",
+              "intake_confirmed"
+            ]
+          },
+          "value": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "evidence": { "type": "string" },
+          "explicitCorrection": { "type": "boolean" }
+        },
+        "required": ["field", "value", "confidence", "evidence", "explicitCorrection"]
+      }
+    },
+    "clarificationNeeded": { "type": "boolean" },
+    "clarificationReason": { "type": "string" },
+    "suggestedQuestion": { "type": "string" }
+  },
+  "required": ["facts", "clarificationNeeded", "clarificationReason", "suggestedQuestion"]
+}

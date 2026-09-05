@@ -19,11 +19,26 @@ const { resolveGuidance } = await import("../src/guidance-engine.js");
 const { handleVapiWebhook } = await import("../src/vapi.js");
 const { buildCaseAccessTemplate, processWhatsAppPayload } = await import("../src/whatsapp.js");
 const { redactSensitiveText } = await import("../src/util.js");
+const { FIELD_DEFINITIONS } = await import("../src/questions.js");
+const { normalizeProposedFact } = await import("../src/interpreter.js");
 
 test.after(() => {
   for (const suffix of ["", "-wal", "-shm"]) {
     try { fs.unlinkSync(`${databasePath}${suffix}`); } catch {}
   }
+});
+
+test("Codex output schema stays synchronized with accepted case fields", () => {
+  const schema = JSON.parse(fs.readFileSync(new URL("../config/codex-interpreter.schema.json", import.meta.url), "utf8"));
+  assert.deepEqual(schema.properties.facts.items.properties.field.enum, Object.keys(FIELD_DEFINITIONS));
+});
+
+test("model-friendly pension labels are deterministically canonicalized", () => {
+  const normalized = normalizeProposedFact({
+    field: "scheme_family", value: "EPS", confidence: 0.84,
+    evidence: "EPS pension from EPFO", explicitCorrection: false,
+  });
+  assert.equal(normalized.value, "eps_95");
 });
 
 test("creates a resumable case for the same channel identity", () => {

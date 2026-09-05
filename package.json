@@ -10,6 +10,7 @@
     "start": "node server.js",
     "test": "node --test",
     "check": "node --check server.js && node --check app.js && node --check admin.js",
+    "check:codex": "node scripts/check-codex-interpreter.mjs",
     "hash-password": "node scripts/hash-password.mjs"
   },
   "engines": {

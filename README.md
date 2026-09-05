@@ -8,7 +8,7 @@ It is not a government service and never claims that a pension has been restarte
 
 - Express serves the public site, JSON APIs, provider webhooks and admin workspace.
 - SQLite stores cases, channel identities, conversations, transcripts, append-only fact history and resolution plans.
-- OpenAI Responses API interprets each raw answer into constrained facts; a conservative local fallback keeps development usable without a key.
+- A ChatGPT-authenticated Codex CLI process or the OpenAI Responses API can interpret each raw answer into constrained facts; a conservative local fallback keeps development usable without either provider.
 - The deterministic guidance engine owns every route and resolution. The model cannot invent or directly mutate a case.
 - Vapi supports a real inbound US number and browser microphone calls with live transcripts.
 - Meta WhatsApp Cloud API supports buttons/lists, same-number continuity and case-code linking.
@@ -34,6 +34,30 @@ npm start
 Open `http://localhost:3000`. The operations workspace is at `http://localhost:3000/admin`.
 
 Without provider credentials, the online intake and admin dashboard still work. In development only, an absent `ADMIN_PASSWORD_HASH` enables `admin` / `admin`.
+
+### Codex interpreter (hackathon mode)
+
+This build can use a locally authenticated Codex CLI instead of an OpenAI Platform API key. Each answer starts an ephemeral, non-interactive run in a new temporary directory with read-only sandboxing and a strict JSON output schema. Application secrets are removed from the child-process environment. The result still passes through the same deterministic field validator and guidance engine. If Codex is unavailable, fails validation or exceeds the timeout, the conservative local interpreter takes over.
+
+Install and sign in as the same Unix user that runs Node/PM2, then configure:
+
+```dotenv
+INTERPRETER_PROVIDER=codex
+CODEX_BIN=/absolute/path/printed/by-command-v-codex
+CODEX_MODEL=
+CODEX_REASONING_EFFORT=low
+CODEX_TIMEOUT_MS=15000
+OPENAI_API_KEY=
+```
+
+Verify the complete bridge before starting PM2:
+
+```bash
+codex login status
+npm run check:codex
+```
+
+`CODEX_MODEL` is intentionally blank by default so the authenticated account can use its current default. This bridge is for the short-lived hackathon deployment, not a general public Codex service. It does not expose a route that accepts arbitrary Codex prompts.
 
 ## Provider setup
 
@@ -69,7 +93,7 @@ The end-of-call webhook sends `verify_account_2` only after explicit consent. Me
 Phone / browser voice ─ Vapi ─┐
 Website ──────────────────────┼─ Express case service ─ SQLite ─ live admin SSE
 WhatsApp ─ Meta Cloud API ────┘          │
-                                         ├─ OpenAI constrained interpretation
+                                         ├─ Codex/OpenAI constrained interpretation
                                          └─ deterministic guidance rules
 ```
 
@@ -110,6 +134,7 @@ Use Certbot (or your existing certificate workflow) for TLS before connecting pr
 - The admin cookie is signed, HTTP-only and secure in production.
 - Six-digit case codes are short-lived hackathon access credentials, not strong long-term authentication. Incorrect attempts are throttled; do not publish screenshots containing real codes or expose sensitive case details solely from a code in a production deployment.
 - Guidance is informational. The relevant pension authority makes the decision.
+- The Codex bridge runs ephemerally with a strict schema and no application secrets in its environment. Caller text remains untrusted input; keep the local fallback enabled and do not repurpose this bridge as a general prompt endpoint.
 
 ## Built with Codex
 

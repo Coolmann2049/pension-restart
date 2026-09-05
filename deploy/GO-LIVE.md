@@ -17,7 +17,15 @@ CASE_CODE_SECRET=<different random 64-hex value>
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD_HASH=<output of npm run hash-password>
 
-OPENAI_API_KEY=<server-side key>
+# Hackathon interpreter using the ChatGPT-authenticated Codex CLI.
+INTERPRETER_PROVIDER=codex
+CODEX_BIN=<absolute path printed by command -v codex>
+CODEX_MODEL=
+CODEX_REASONING_EFFORT=low
+CODEX_TIMEOUT_MS=15000
+
+# Optional API-key alternative. It can remain blank when Codex is selected.
+OPENAI_API_KEY=
 OPENAI_MODEL=gpt-5.4-mini
 
 VAPI_PRIVATE_API_KEY=<private key>
@@ -44,7 +52,22 @@ WHATSAPP_ACCESS_TEMPLATE_LINK_TARGET=your pension guidance case
 
 Generate each random secret independently with `openssl rand -hex 32`.
 
-## 2. Install and start with PM2
+## 2. Install and authenticate Codex
+
+Run every command in this section as the same non-root Unix user that will run PM2. Do not log Codex in as `root` and then start PM2 as another user.
+
+```bash
+curl -fsSL https://chatgpt.com/codex/install.sh | sh
+command -v codex
+codex login --device-auth
+codex login status
+```
+
+Open the displayed URL on your own computer and enter the one-time code. If device authentication is not available, run `codex login` through an SSH localhost-forwarding session as described in the official Codex authentication guide.
+
+Put the absolute path printed by `command -v codex` into `CODEX_BIN`. Codex stores refreshable account credentials in the deployment user's local credential store (commonly `~/.codex/auth.json` on a headless server). Treat that file like a password: never copy it into the repository, `.env`, PM2 config, logs or support messages.
+
+## 3. Install and start with PM2
 
 The repository should live at `/var/www/pension-restart`. Install Node.js 20 or newer, then run:
 
@@ -53,6 +76,7 @@ cd /var/www/pension-restart
 npm ci
 npm run build
 npm test
+npm run check:codex
 mkdir -p /var/www/pension-restart/data
 chmod 750 /var/www/pension-restart/data
 npm install --global pm2
@@ -60,6 +84,8 @@ pm2 startOrReload ecosystem.config.cjs --update-env
 pm2 save
 curl --fail http://127.0.0.1:3000/health
 ```
+
+The health response should report `"interpretation":"codex"`. `npm run check:codex` must print `"provider":"codex"`; if it prints a local fallback, do not continue until its `providerError` is resolved.
 
 Run PM2 as the same non-root deployment user each time. The application reads `/var/www/pension-restart/.env` itself. Keep `instances: 1`; the SQLite database and in-process live event stream are deliberately single-process.
 
@@ -77,7 +103,7 @@ curl --fail https://pension-restart.yashdeep-jha.site/health
 
 The supplied Nginx file expects an existing Let's Encrypt certificate at `/etc/letsencrypt/live/pension-restart.yashdeep-jha.site/`. If it does not exist yet, obtain it with the server's existing Certbot workflow before enabling the TLS block.
 
-## 3. Provider callbacks
+## 4. Provider callbacks
 
 Meta WhatsApp callback URL:
 
@@ -101,9 +127,9 @@ node scripts/configure-vapi.mjs --dry-run
 node scripts/configure-vapi.mjs --apply
 ```
 
-## 4. End-to-end check
+## 5. End-to-end check
 
-1. Open `/health`; `vapi`, `vapiPhone`, `whatsapp`, and `adminAuth` should be `true`.
+1. Open `/health`; `interpretation` should be `codex`, and `vapi`, `vapiPhone`, `whatsapp`, and `adminAuth` should be `true`.
 2. Send `Namaste` to the WhatsApp number. The bot should return a `PR-123456` case and the first button question.
 3. Answer one question and confirm the same case updates in `/admin`.
 4. Call the Telnyx/Vapi number, consent to WhatsApp follow-up, finish the intake, and hang up.
@@ -111,3 +137,5 @@ node scripts/configure-vapi.mjs --apply
 6. Enter either `123456` or `PR-123456` on the website continuation page and confirm it reconnects the same record.
 
 Use `pm2 logs pension-restart` for application errors, `pm2 monit` for process state, and `/var/log/nginx/error.log` for proxy/TLS errors.
+
+If Codex authentication fails later, run `codex login status` as the PM2 user and repeat `codex login --device-auth` if necessary. The backend will continue through the conservative local fallback while Codex is unavailable.

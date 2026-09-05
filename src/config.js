@@ -24,6 +24,11 @@ const integer = (value, fallback) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const requestedInterpreter = String(process.env.INTERPRETER_PROVIDER || "auto").trim().toLowerCase();
+const interpreterProvider = ["auto", "codex", "openai", "local"].includes(requestedInterpreter)
+  ? requestedInterpreter
+  : "auto";
+
 export const config = Object.freeze({
   nodeEnv: process.env.NODE_ENV || "development",
   port: integer(process.env.PORT, 3000),
@@ -34,6 +39,13 @@ export const config = Object.freeze({
   adminUsername: process.env.ADMIN_USERNAME || "admin",
   adminPasswordHash: process.env.ADMIN_PASSWORD_HASH || "",
   dataRetentionDays: integer(process.env.DATA_RETENTION_DAYS, 30),
+  interpreter: {
+    provider: interpreterProvider,
+    codexBin: process.env.CODEX_BIN || "codex",
+    codexModel: process.env.CODEX_MODEL || "",
+    codexReasoningEffort: process.env.CODEX_REASONING_EFFORT || "low",
+    codexTimeoutMs: integer(process.env.CODEX_TIMEOUT_MS, 15_000),
+  },
   openai: {
     apiKey: process.env.OPENAI_API_KEY || "",
     model: process.env.OPENAI_MODEL || "gpt-5.4-mini",
@@ -64,9 +76,12 @@ export const config = Object.freeze({
 });
 
 export function configurationStatus() {
+  const interpretation = config.interpreter.provider === "auto"
+    ? (config.openai.apiKey ? "openai" : "local-fallback")
+    : config.interpreter.provider;
   return {
     environment: config.nodeEnv,
-    interpretation: config.openai.apiKey ? "openai" : "local-fallback",
+    interpretation,
     vapi: Boolean(config.vapi.privateKey && config.vapi.assistantId),
     vapiWebCall: Boolean(config.vapi.publicKey && config.vapi.assistantId),
     vapiPhone: Boolean(config.vapi.phoneNumberDisplay),
@@ -82,6 +97,7 @@ export function productionWarnings() {
   if (config.sessionSecret.startsWith("development-")) warnings.push("SESSION_SECRET uses the development default");
   if (config.caseCodeSecret.startsWith("development-")) warnings.push("CASE_CODE_SECRET uses the development default");
   if (!config.adminPasswordHash) warnings.push("ADMIN_PASSWORD_HASH is not configured");
+  if (config.interpreter.provider === "openai" && !config.openai.apiKey) warnings.push("INTERPRETER_PROVIDER=openai requires OPENAI_API_KEY");
   if (!config.vapi.webhookSecret) warnings.push("VAPI_WEBHOOK_SECRET is not configured");
   if (config.whatsapp.accessToken && !config.whatsapp.appSecret) warnings.push("META_APP_SECRET is required to verify WhatsApp webhook signatures");
   if (config.whatsapp.accessToken && !config.whatsapp.verifyToken) warnings.push("WHATSAPP_VERIFY_TOKEN is not configured");
