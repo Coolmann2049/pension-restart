@@ -34,6 +34,17 @@ db.exec(`
     UNIQUE(channel, identity_key)
   );
 
+  CREATE TABLE IF NOT EXISTS support_relationships (
+    id TEXT PRIMARY KEY,
+    supporter_identity_key TEXT NOT NULL,
+    case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+    relationship TEXT NOT NULL DEFAULT 'family',
+    consent_confirmed INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(supporter_identity_key, case_id)
+  );
+
   CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY,
     case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
@@ -133,6 +144,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_conversations_case ON conversations(case_id, started_at DESC);
   CREATE INDEX IF NOT EXISTS idx_messages_case ON messages(case_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_fact_events_case ON fact_events(case_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_support_relationships_supporter ON support_relationships(supporter_identity_key, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_case_access_attempts_subject ON case_access_attempts(subject_hash, channel, created_at);
 `);
 
@@ -149,6 +161,16 @@ const statements = {
   setResolution: db.prepare(`UPDATE cases SET status = 'guidance_prepared', resolution_json = ?, completeness = 100,
     current_question_id = NULL, version = version + 1, updated_at = ? WHERE id = ?`),
   identityByKey: db.prepare("SELECT * FROM channel_identities WHERE channel = ? AND identity_key = ?"),
+  supportRelationship: db.prepare("SELECT * FROM support_relationships WHERE supporter_identity_key = ? AND case_id = ? AND consent_confirmed = 1"),
+  supportedCases: db.prepare(`SELECT cases.* FROM cases
+    JOIN support_relationships ON support_relationships.case_id = cases.id
+    WHERE support_relationships.supporter_identity_key = ? AND support_relationships.consent_confirmed = 1
+    ORDER BY cases.updated_at DESC`),
+  upsertSupportRelationship: db.prepare(`INSERT INTO support_relationships
+    (id, supporter_identity_key, case_id, relationship, consent_confirmed, created_at, updated_at)
+    VALUES (@id, @supporterIdentityKey, @caseId, @relationship, @consentConfirmed, @at, @at)
+    ON CONFLICT(supporter_identity_key, case_id) DO UPDATE SET
+      relationship = excluded.relationship, consent_confirmed = excluded.consent_confirmed, updated_at = excluded.updated_at`),
   upsertIdentity: db.prepare(`INSERT INTO channel_identities
     (id, case_id, channel, identity_key, verified, created_at, last_seen_at)
     VALUES (@id, @caseId, @channel, @identityKey, @verified, @at, @at)
@@ -270,6 +292,31 @@ export function findCaseByIdentity(channel, identityKey) {
 export function attachIdentity(caseId, channel, identityKey, verified = false) {
   if (!identityKey) return;
   statements.upsertIdentity.run({ id: id("identity"), caseId, channel, identityKey, verified: verified ? 1 : 0, at: now() });
+}
+
+export function grantSupportAccess({ caseId, supporterIdentityKey, relationship = "family", consentConfirmed = false }) {
+  if (!supporterIdentityKey || !consentConfirmed) {
+    throw Object.assign(new Error("Pensioner permission must be confirmed before linking a case"), { statusCode: 400 });
+  }
+  const record = getCaseRecord(caseId);
+  if (!record) throw Object.assign(new Error("Case not found"), { statusCode: 404 });
+  const allowedRelationships = new Set(["self", "spouse", "child", "grandchild", "relative", "helper", "family"]);
+  const normalizedRelationship = allowedRelationships.has(relationship) ? relationship : "family";
+  statements.upsertSupportRelationship.run({
+    id: id("support"), supporterIdentityKey, caseId: record.id,
+    relationship: normalizedRelationship, consentConfirmed: 1, at: now(),
+  });
+  return record;
+}
+
+export function hasSupportAccess(supporterIdentityKey, caseIdOrCode) {
+  const record = getCaseRecord(caseIdOrCode);
+  return Boolean(record && statements.supportRelationship.get(supporterIdentityKey, record.id));
+}
+
+export function listSupportedCases(supporterIdentityKey) {
+  if (!supporterIdentityKey) return [];
+  return statements.supportedCases.all(supporterIdentityKey).map(mapCase);
 }
 
 export function checkCaseAccessLimit({ channel, subject, maxAttempts = 5, windowMinutes = 15 }) {

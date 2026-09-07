@@ -1,5 +1,7 @@
 # Pension Restart
 
+For the redesigned interface, preservation checks and review notes, see [UI-REVIEW.md](UI-REVIEW.md).
+
 Pension Restart is an independent, elderly-first pension guidance service. A caller can explain a pension problem in Hindi, English or Hinglish; the system gathers one answer at a time, keeps a correction-safe case record, and returns a deterministic guidance route. The same case can continue on the website, a Vapi telephone assistant or a Meta WhatsApp bot.
 
 It is not a government service and never claims that a pension has been restarted.
@@ -14,6 +16,7 @@ It is not a government service and never claims that a pension has been restarte
 - Meta WhatsApp Cloud API supports buttons/lists, same-number continuity and case-code linking.
 - Server-Sent Events update `/admin` as calls and messages arrive.
 - A private six-digit code connects a case across channels. It is verified when entered and then remains the user-facing case reference; the database continues to use an internal UUID.
+- The user-facing case dashboard shows a sanitized, continuable case view. The browser-bound family dashboard can hold multiple cases only after the helper records the pensioner's permission for each one.
 - Repeated incorrect code attempts are throttled. Legacy `PR-…` codes are migrated to six digits while remaining valid as hidden aliases.
 
 The older document-review screens remain clearly labelled demonstration states. There is no government, Aadhaar, bank or Jeevan Pramaan integration.
@@ -76,6 +79,8 @@ node scripts/configure-vapi.mjs --apply
 
 The second command creates or updates the assistant and, when `VAPI_PHONE_NUMBER_ID` is present, assigns it to the number. If it creates a new assistant, put the printed ID in `.env` and rerun it.
 
+`VAPI_PHONE_NUMBER_DISPLAY` is the public, human-readable version of that number. The UI promotes it as the primary click-to-call action; while it is empty, the same location deliberately shows `Awaiting VAPI number` and routes people to browser or online guidance instead.
+
 ### Meta WhatsApp Cloud API
 
 1. In Meta for Developers, create a **Business** app, add **WhatsApp**, and connect the WABA/production phone number. Copy the app secret, phone-number ID and WABA ID.
@@ -107,7 +112,7 @@ npm test
 npm run build
 ```
 
-Tests cover case resume, one-question advancement, ambiguous answers, boolean UI values, correction history, rejected readbacks, guidance routing, the Vapi tool-response contract and WhatsApp message deduplication.
+Tests cover case resume, consented family-case relationships, multi-case family dashboards, one-question advancement, ambiguous answers, boolean UI values, correction history, rejected readbacks, guidance routing, the Vapi tool-response contract and WhatsApp message deduplication.
 
 ## Deployment
 
@@ -132,6 +137,7 @@ Use Certbot (or your existing certificate workflow) for TLS before connecting pr
 - Audio recording is disabled in the generated Vapi configuration; final transcript turns and case facts are stored.
 - Public API keys are client-visible by design and must be restricted. Private provider keys stay server-side in `.env`.
 - The admin cookie is signed, HTTP-only and secure in production.
+- Family access is tied to the HTTP-only browser identity cookie and a recorded consent assertion. Client case responses exclude raw transcripts, fact history and audit events.
 - Six-digit case codes are short-lived hackathon access credentials, not strong long-term authentication. Incorrect attempts are throttled; do not publish screenshots containing real codes or expose sensitive case details solely from a code in a production deployment.
 - Guidance is informational. The relevant pension authority makes the decision.
 - The Codex bridge runs ephemerally with a strict schema and no application secrets in its environment. Caller text remains untrusted input; keep the local fallback enabled and do not repurpose this bridge as a general prompt endpoint.

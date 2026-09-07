@@ -1,6 +1,6 @@
 import {
   addAudit, addMessage, addUncertainFact, attachIdentity, checkCaseAccessLimit, commitFact, createCaseRecord,
-  findCaseByIdentity, getCaseRecord, getFacts, getOrCreateConversation, hydrateCase, moveConversationToCase,
+  findCaseByIdentity, getCaseRecord, getFacts, getOrCreateConversation, grantSupportAccess, hydrateCase, moveConversationToCase,
   recordCaseAccessAttempt, saveResolution, updateCaseProgress,
 } from "./db.js";
 import { completion, nextQuestion, questionById } from "./questions.js";
@@ -28,16 +28,20 @@ export function createOrResumeCase({ channel = "web", identityKey = "", external
   return { case: hydrateCase(record.id), conversation, resumed, nextQuestion: nextQuestion(facts) };
 }
 
-export function connectConversationByCode({ publicCode, channel, identityKey = "", conversationId = null, accessSubject = "" }) {
+function normalizeCaseCode(publicCode) {
   const supplied = String(publicCode || "").trim().toUpperCase();
   const compact = supplied.replace(/[^A-Z0-9]/g, "");
-  const normalized = /^\d{6}$/.test(compact)
+  return /^\d{6}$/.test(compact)
     ? compact
     : /^PR\d{6}$/.test(compact)
       ? compact.slice(2)
     : compact.startsWith("PR") && compact.length === 12
       ? `PR-${compact.slice(2, 6)}-${compact.slice(6)}`
       : supplied;
+}
+
+export function connectConversationByCode({ publicCode, channel, identityKey = "", conversationId = null, accessSubject = "" }) {
+  const normalized = normalizeCaseCode(publicCode);
   const subjectHash = checkCaseAccessLimit({ channel, subject: accessSubject || identityKey || "anonymous" });
   const target = getCaseRecord(normalized);
   recordCaseAccessAttempt({ channel, subjectHash, successful: Boolean(target) });
@@ -47,6 +51,33 @@ export function connectConversationByCode({ publicCode, channel, identityKey = "
   if (identityKey) attachIdentity(target.id, channel, identityKey, true);
   const record = hydrateCase(target.id);
   publish("case.connected", { caseId: record.id, publicCode: record.publicCode, channel });
+  return { case: record, nextQuestion: nextQuestion(record.facts) };
+}
+
+export function connectSupporterByCode({ publicCode, supporterIdentityKey, relationship = "family", consentConfirmed = false, accessSubject = "" }) {
+  if (!consentConfirmed) {
+    throw Object.assign(new Error("Confirm that you have the pensioner's permission before linking this case"), { statusCode: 400 });
+  }
+  const normalized = normalizeCaseCode(publicCode);
+  const subjectHash = checkCaseAccessLimit({
+    channel: "family",
+    subject: accessSubject || supporterIdentityKey || "anonymous",
+  });
+  const target = getCaseRecord(normalized);
+  recordCaseAccessAttempt({ channel: "family", subjectHash, successful: Boolean(target) });
+  if (!target) throw Object.assign(new Error("Code not recognized"), { statusCode: 404 });
+  grantSupportAccess({
+    caseId: target.id,
+    supporterIdentityKey,
+    relationship,
+    consentConfirmed,
+  });
+  const record = hydrateCase(target.id);
+  publish("case.support-linked", {
+    caseId: record.id,
+    publicCode: record.publicCode,
+    relationship,
+  });
   return { case: record, nextQuestion: nextQuestion(record.facts) };
 }
 

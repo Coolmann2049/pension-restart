@@ -28,6 +28,17 @@ let liveCallTimer = null;
 let liveMuted = false;
 let webCase = null;
 let webCaseLoading = false;
+let webCaseError = "";
+let webAnswerSubmitting = false;
+let familyCases = null;
+let familyCasesLoading = false;
+let familyCasesError = "";
+let familyCaseLinking = false;
+let publicCase = null;
+let publicCaseLoading = false;
+let publicCaseError = "";
+let publicCaseRequestedCode = "";
+let renderedRoute = null;
 
 const app = document.querySelector("#app");
 const toast = document.querySelector("#toast");
@@ -89,8 +100,7 @@ function pageHero(eyebrow, title, copy, extra = "") {
     <section class="page-hero">
       <div class="container">
         <div>
-          <div class="breadcrumb"><a href="#/">Home</a> / ${eyebrow}</div>
-          <span class="eyebrow">${eyebrow}</span>
+          <nav class="breadcrumb" aria-label="Breadcrumb"><a href="#/">Home</a><span aria-hidden="true">/</span><span>${eyebrow}</span></nav>
           <h1>${title}</h1>
           <p class="lead">${copy}</p>
         </div>
@@ -99,162 +109,172 @@ function pageHero(eyebrow, title, copy, extra = "") {
     </section>`;
 }
 
+function uiIcon(name, className = "") {
+  const paths = {
+    phone: '<path d="M8 3H5a2 2 0 0 0-2 2c0 8.84 7.16 16 16 16a2 2 0 0 0 2-2v-3l-5-2-2 2a14 14 0 0 1-6-6l2-2-2-5Z"/>',
+    arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+    file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
+    people: '<circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M21 21v-3a6 6 0 0 0-3-5"/>',
+    shield: '<path d="M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7l-9-4Z"/><path d="m8 12 3 3 5-6"/>',
+    message: '<path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l-3 2V11.5A8.5 8.5 0 0 1 9.5 3h3a8.5 8.5 0 0 1 8.5 8.5Z"/><path d="M7 9h8M7 14h5"/>',
+    check: '<path d="m5 12 4 4L19 6"/>',
+    mic: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/>',
+  };
+  return `<svg class="ui-icon ${className}" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.file}</svg>`;
+}
+
+function configuredPhone() {
+  return String(runtimeConfig.phoneNumber || "").trim();
+}
+
+function phoneLink(phone = configuredPhone()) {
+  const dialable = phone.replace(/[^+\d]/g, "");
+  return dialable ? `tel:${dialable}` : "";
+}
+
+function directCallCard(context = "home") {
+  const phone = configuredPhone();
+  const href = phoneLink(phone);
+  const contextClass = `direct-call-card--${context}`;
+  if (!phone || !href) {
+    return `
+      <aside class="direct-call-card ${contextClass} is-pending" aria-label="Phone line status">
+        <div class="direct-call-card-top">
+          <span class="direct-call-kicker">${uiIcon("phone")}Call the pension guide</span>
+          <span class="phone-line-status">Phone line pending</span>
+        </div>
+        <span class="direct-call-number">Awaiting VAPI number</span>
+        <p>The answerable phone line will appear here as soon as it is connected. Browser voice and online guidance are available now.</p>
+      </aside>`;
+  }
+  return `
+    <aside class="direct-call-card ${contextClass}" aria-label="Call Pension Restart">
+      <div class="direct-call-card-top">
+        <span class="direct-call-kicker">${uiIcon("phone")}Call the pension guide</span>
+        <span class="phone-line-status">Phone line ready</span>
+      </div>
+      <a class="direct-call-number" href="${href}" aria-label="Call Pension Restart at ${escapeAttr(phone)}">${escapeAttr(phone)}</a>
+      <p>Call this number to speak with the AI pension guide. English, Hindi and Hinglish are supported. International calling charges may apply.</p>
+    </aside>`;
+}
+
+function syncRuntimeShell() {
+  const phone = configuredPhone();
+  const href = phoneLink(phone) || "#/call";
+  const headerCall = document.querySelector("#header-call-link");
+  if (headerCall) {
+    headerCall.href = href;
+    headerCall.innerHTML = `${uiIcon("phone")}<span class="header-call-label">${phone ? "Call now" : "Call the guide"}</span>`;
+    headerCall.setAttribute("aria-label", phone ? `Call Pension Restart at ${phone}` : "Open phone guidance options");
+  }
+  const footerCall = document.querySelector("#footer-call-link");
+  if (footerCall) {
+    footerCall.href = href;
+    footerCall.textContent = phone ? `Call ${phone}` : "Talk to the pension guide";
+  }
+}
+
 function homeView() {
-  const phone = runtimeConfig.phoneNumber || "Number being connected";
-  const phoneHref = runtimeConfig.phoneNumber ? `tel:${runtimeConfig.phoneNumber.replace(/[^+\d]/g, "")}` : "#/call";
+  const phone = configuredPhone();
+  const phoneHref = phoneLink(phone) || "#/call";
   const whatsappDigits = String(runtimeConfig.whatsappNumber || "").replace(/\D/g, "");
   const whatsappHref = whatsappDigits ? `https://wa.me/${whatsappDigits}?text=${encodeURIComponent("Namaste, I need pension guidance")}` : "";
   return `
     <section class="hero">
-      <div class="hero-grid">
+      <div class="container hero-grid">
         <div class="hero-copy">
-          <span class="eyebrow">Live AI voice guidance</span>
-          <h1>When your pension stops, <em>one call</em> should tell you what to do next.</h1>
-          <p class="lead">Explain the problem in your own words. Leave with a clear summary, a safe document checklist and a practical next step—without first understanding every portal.</p>
-          <p class="hero-number-label">Call for pension guidance</p>
-          <a class="hero-number" href="${phoneHref}" aria-label="Call Pension Restart">${escapeAttr(phone)}</a>
-          <p class="hero-note">Independent AI guidance — not a government helpline. International calling charges may apply.</p>
+          <h1>A stopped pension.<br>A clearer way<br>forward.</h1>
+          <p class="lead">Call our AI pension guide and tell us what happened, in your own words. We’ll help you understand the problem and prepare your next step.</p>
+          ${directCallCard("home")}
           <div class="hero-actions">
-            <a class="button button-primary" href="#/call">☎ Talk to the voice guide</a>
-            ${whatsappHref ? `<a class="button button-outline" href="${whatsappHref}" target="_blank" rel="noopener">Continue on WhatsApp</a>` : ""}
-            <a class="button button-quiet" href="#/online">Continue online instead</a>
+            <a class="button button-quiet" href="#/call">${uiIcon("mic")}Use browser voice</a>
+            <a class="button button-quiet" href="#/online">Get help online</a>
           </div>
-          <div class="hero-safety"><span class="shield-dot"></span>Never share an Aadhaar number, bank or government OTP, PIN, CVV, full account number or bank password.</div>
+          <p class="language-note">Speak in <strong>English</strong>, <strong lang="hi">हिंदी</strong> or <strong>Hinglish</strong></p>
+          <div class="hero-return">Already spoken with us? <a href="#/status">Continue your case</a></div>
         </div>
-        <div class="hero-art" aria-hidden="true">
-          <picture>
-            <source srcset="assets/hero-anchor.webp" type="image/webp" />
-            <img src="assets/hero-anchor.png" alt="" width="1536" height="1024" />
-          </picture>
+        <div class="conversation-preview" aria-label="Illustrative pension guidance conversation">
+          <div class="preview-heading"><span class="preview-symbol">${uiIcon("message")}</span><span>A conversation is a beginning.</span></div>
+          <div class="example-conversation">
+            <span class="example-label">For example</span>
+            <p class="example-hindi" lang="hi">“मेरी पेंशन नहीं आई।<br>अब मैं क्या करूँ?”</p>
+            <p class="example-translation">“My pension hasn’t arrived.<br>What should I do now?”</p>
+          </div>
+          <div class="example-connector" aria-hidden="true"><span></span>${uiIcon("arrow")}</div>
+          <div class="guidance-preview">
+            <div class="guidance-preview-title"><span class="document-icon">${uiIcon("file")}</span><div><h2>Let’s work out your next step.</h2><p>A clear plan to take with you</p></div></div>
+            <ul><li>${uiIcon("check")}A summary of what happened</li><li>${uiIcon("check")}The references to keep ready</li><li>${uiIcon("check")}Where to ask for help</li></ul>
+            <div class="preview-footnote">Your situation. Your language. Your next step.</div>
+          </div>
+          <p class="illustration-caption">Illustrative guidance. Your plan depends on your answers.</p>
         </div>
       </div>
     </section>
+    <div class="trust-strip"><div class="container">${uiIcon("shield")}<p><strong>Guidance you can understand.</strong> Independent support. No Aadhaar numbers, bank passwords or OTPs requested.</p><a href="#/about">About this service</a></div></div>
 
-    <section class="section section-tight">
-      <div class="value-strip">
-        <div class="value-item"><span class="icon-box">1</span><div><h3>Speak naturally</h3><p>Describe what happened in Hindi or English.</p></div></div>
-        <div class="value-item"><span class="icon-box teal">2</span><div><h3>Understand the problem</h3><p>Review one plain-language pension summary.</p></div></div>
-        <div class="value-item"><span class="icon-box gold">3</span><div><h3>Know the next step</h3><p>Receive the checklist and available official routes.</p></div></div>
-      </div>
-    </section>
-
-    <section class="section surface-white">
+    <section class="section needs-section">
       <div class="container">
-        <div class="section-heading centered">
-          <span class="eyebrow">Start with what happened</span>
-          <h2>You should not need to know the right department before asking for help.</h2>
-          <p class="lead">Choose the sentence that sounds closest to your situation.</p>
-        </div>
-        <div class="card-grid">
-          <article class="service-card"><span class="service-number">01</span><h3>My pension has stopped</h3><p>Organise the dates, likely causes and references needed for recovery.</p><a class="text-link" href="#/call">Get restart guidance</a></article>
-          <article class="service-card"><span class="service-number">02</span><h3>I need a life certificate</h3><p>Compare mobile, bank, post office, centre and doorstep options.</p><a class="text-link" href="#/options">Compare options</a></article>
-          <article class="service-card"><span class="service-number">03</span><h3>I am helping someone</h3><p>Prepare documents and deadlines while keeping the pensioner in control.</p><a class="text-link" href="#/family">Open family assistance</a></article>
+        <div class="section-heading heading-row"><div><h2>What brings you here?</h2><p>Start with the situation that feels closest to yours.</p></div><a class="text-link" href="#/help">Visit the help centre ${uiIcon("arrow")}</a></div>
+        <div class="need-grid">
+          <a class="need-card" href="#/call"><span class="need-icon">${uiIcon("message")}</span><h3>My pension has stopped</h3><p>Make sense of a missing payment and find out what to do next.</p><span class="need-action">Get pension guidance ${uiIcon("arrow")}</span></a>
+          <a class="need-card" href="#/options"><span class="need-icon">${uiIcon("file")}</span><h3>I need a life certificate</h3><p>Explore ways to submit it, at home or with help in person.</p><span class="need-action">Explore your options ${uiIcon("arrow")}</span></a>
+          <a class="need-card" href="#/family"><span class="need-icon">${uiIcon("people")}</span><h3>I’m helping a loved one</h3><p>Keep their information together, with them in control.</p><span class="need-action">Find family assistance ${uiIcon("arrow")}</span></a>
         </div>
       </div>
+    </section>
+
+    <section class="section journey-section">
+      <div class="container journey-layout">
+        <div class="journey-intro"><h2>Less running around.<br>More understanding.</h2><p class="lead">You shouldn’t have to know the right department before asking for help.</p><a class="text-link" href="#/online">Start with one question ${uiIcon("arrow")}</a></div>
+        <ol class="journey-steps">
+          <li><span class="step-number">1</span><div><h3>Tell us what happened</h3><p>Speak to the AI guide or answer online, one question at a time. It’s okay if you don’t know every detail.</p></div></li>
+          <li><span class="step-number">2</span><div><h3>Check we’ve understood</h3><p>Review your details and correct anything that doesn’t sound right.</p></div></li>
+          <li><span class="step-number">3</span><div><h3>Leave with a practical next step</h3><p>Keep your guidance, document checklist and private case code for the next conversation.</p></div></li>
+        </ol>
+      </div>
+      <div class="container continuity-note">${uiIcon("file")}<p><strong>One case, wherever you continue.</strong> Use your private code to pick up on phone, WhatsApp or the website.</p></div>
     </section>
 
     <section class="section">
-      <div class="container story-grid">
-        <div class="story-visual" aria-hidden="true">
-          <div class="calendar-art">
-            <div class="calendar-top"><span>Pension record</span><span>2025</span></div>
-            <div class="calendar-month">December</div>
-            <div class="missed-payment">Expected pension credit not received</div>
-          </div>
-        </div>
-        <div>
-          <span class="eyebrow">The story behind the build</span>
-          <h2>Pensions are not just payments.</h2>
-          <p class="story-quote">“Her pension stopped in December. We only discovered the missed life certificate after the payment disappeared.”</p>
-          <p class="lead">For many older people, a pension pays for food, medicine, rent and everyday independence. The first failure is often not a missing form. It is not knowing what went wrong.</p>
-        </div>
+      <div class="container learning-layout">
+        <div class="certificate-note"><span class="note-icon">${uiIcon("file")}</span><h2>A small certificate.<br>An important next step.</h2><p>A life certificate confirms that the pensioner is alive. Jeevan Pramaan is one digital route; assisted and conventional routes may also be available.</p><a class="text-link" href="#/options">Understand the options ${uiIcon("arrow")}</a></div>
+        <div class="helpful-list"><h2>Before you begin</h2><p>It helps to have these nearby. You can still start if you’re unsure.</p><ul><li><span>Pension reference</span><span>Your PPO, if available</span></li><li><span>Last payment</span><span>The last month you received pension</span></li><li><span>Certificate receipt</span><span>A Pramaan ID or acknowledgement</span></li></ul><p class="privacy-note">${uiIcon("shield")}Keep identity numbers and bank details private.</p></div>
       </div>
     </section>
 
-    <section class="section surface-white">
-      <div class="container">
-        <div class="section-heading">
-          <span class="eyebrow">Understand the requirement</span>
-          <h2>What is a life certificate?</h2>
-          <p class="lead">A life certificate confirms that a pensioner is alive and remains eligible for continued pension payments. Jeevan Pramaan is one Aadhaar-based digital route—not the only possible route.</p>
-        </div>
-        <div class="process-grid">
-          <article class="process-card"><h3>Prepare the references</h3><p>Keep the PPO, pension account details and pension authority information ready.</p></article>
-          <article class="process-card"><h3>Choose an eligible route</h3><p>Use mobile, an assisted centre, the pension agency or available doorstep help.</p></article>
-          <article class="process-card"><h3>Complete proof of life</h3><p>The pensioner completes the authentication or declaration required by that route.</p></article>
-          <article class="process-card"><h3>Keep the acknowledgement</h3><p>Save the Pramaan ID or receipt until acceptance and pension credit are confirmed.</p></article>
-        </div>
-        <div class="actions-row"><a class="button button-outline" href="#/options">See all submission routes</a><a class="button button-quiet" href="#/help">Read plain-language guides</a></div>
-      </div>
-    </section>
-
-    <section class="section surface-terracotta">
-      <div class="container split-grid">
-        <div>
-          <span class="eyebrow eyebrow-light">If pension already stopped</span>
-          <h2>Do four things before starting another complaint.</h2>
-          <p class="lead lead-light">Confirm the last credit, find the life-certificate evidence, identify the pension payer and keep one complete recovery record.</p>
-          <a class="button button-secondary" href="#/online">Start a recovery record</a>
-        </div>
-        <div class="info-card">
-          <ol class="check-list">
-            <li>Note the last pension-credit month.</li>
-            <li>Look for a Pramaan ID, receipt or rejection message.</li>
-            <li>Check the PPO or statement for the pension payer.</li>
-            <li>Carry the same dates and references into every follow-up.</li>
-          </ol>
-        </div>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="container">
-        <div class="section-heading centered"><span class="eyebrow">Bring what helps</span><h2>Never share what should remain private.</h2></div>
-        <div class="card-grid two">
-          <article class="info-card"><span class="icon-box teal">✓</span><h3>Helpful references</h3><ul class="check-list"><li>PPO or pension reference</li><li>Last pension-credit month</li><li>Pramaan ID or acknowledgement</li><li>Redacted pension-credit record</li></ul></article>
-          <article class="info-card"><span class="icon-box">!</span><h3>Never requested here</h3><ul class="check-list"><li>Real Aadhaar or PAN</li><li>Bank or government OTP, PIN, CVV or password</li><li>Payment-card details</li><li>Unredacted bank statements</li></ul></article>
-        </div>
-      </div>
-    </section>
-
-    <section class="section section-tight">
-      <div class="container banner">
-        <div><span class="eyebrow eyebrow-light">One clear beginning</span><h2>A pension problem should not begin with finding the right portal.</h2><p>Start with one guided conversation and leave with a next step your family can understand.</p></div>
-        <a class="button button-primary" href="#/call">Talk to the guide</a>
-      </div>
-    </section>`;
+    <section class="section final-help-section"><div class="container final-help"><div><h2>You don’t have to figure<br>it out all at once.</h2><p>Begin with a conversation. Take the next step with clarity.</p></div><div class="final-help-actions"><a class="button button-primary" href="${phoneHref}">${uiIcon("phone")}${phone ? `Call ${escapeAttr(phone)}` : "View phone guidance"}</a><a class="text-link" href="#/online">Prefer to type? Continue online</a>${whatsappHref ? `<a class="text-link" href="${whatsappHref}" target="_blank" rel="noopener noreferrer">Continue on WhatsApp</a>` : ""}</div></div>
+    ${phone ? '<p class="container phone-alternative">The displayed number connects directly to the Pension Restart AI guide.<span>International calling charges may apply.</span></p>' : ""}</section>`;
 }
 
 function callView() {
-  const phone = runtimeConfig.phoneNumber || "Phone number will appear after Vapi is configured";
-  const phoneHref = runtimeConfig.phoneNumber ? `tel:${runtimeConfig.phoneNumber.replace(/[^+\d]/g, "")}` : "";
   const browserReady = runtimeConfig.providers?.vapiWebCall;
-  return `${pageHero("Call for guidance", "Speak first. Sort out the forms later.", "Call the live helpline or speak through this browser. The AI asks one question at a time and creates a continuing Pension Restart case.")}
+  return `${pageHero("Talk to the pension guide", "One number. A clearer next step.", "Call the Pension Restart AI guide from any phone, or use the browser voice option below.")}
     <section class="section section-tight">
       <div class="container">
-        <div class="live-call-options">
-          <article class="summary-card call-option"><span class="eyebrow">Call from any phone</span><h2>${escapeAttr(phone)}</h2><p>Your caller number can reconnect you to the same case. A short case ID is provided for moving between phone, WhatsApp and web.</p>${phoneHref ? `<a class="button button-primary" href="${phoneHref}">Call the helpline</a>` : '<span class="status-badge neutral">Awaiting Vapi number</span>'}</article>
-          <article class="summary-card call-option"><span class="eyebrow">Browser fallback</span><h2>Use your microphone</h2><p>The same Vapi assistant runs here if international calling is unavailable. Your browser will ask for microphone permission.</p><span class="status-badge ${browserReady ? "success" : "neutral"}">${browserReady ? "Ready" : "Awaiting Vapi public key"}</span></article>
-        </div>
-        <div class="spacer-md"></div>
-        <div class="callout danger"><strong>Before you begin</strong><p>This is independent AI guidance, not a government service. Do not say an Aadhaar number, bank or government OTP, PIN, password, CVV or full bank-account number. Important details are read back for confirmation.</p></div>
-        <div class="spacer-md"></div>
-        <div class="phone-shell live-phone" id="phone-shell">
-          <div class="phone-top"><span class="connected waiting" id="connection-state">Ready to connect</span><span id="call-duration">00:00</span></div>
+        ${directCallCard("call")}
+        <div class="call-browser-heading"><span class="eyebrow">Browser option</span><h2>Prefer to speak without leaving this page?</h2><p>Use your microphone for the same guided conversation.</p></div>
+        <div class="call-session-layout">
+          <div class="phone-shell live-phone" id="phone-shell">
+          <div class="phone-top"><span class="connected waiting" id="connection-state">${browserReady ? "Ready when you are" : "Browser calling unavailable"}</span><span id="call-duration">00:00</span></div>
           <div class="phone-body">
-            <div class="caller-block"><span class="caller-avatar">PR</span><h2>Pension guide</h2><p>English · हिंदी · Hinglish</p></div>
-            <div class="transcript-heading"><strong>Live transcript</strong><span id="voice-status">${browserReady ? "Microphone off" : "Provider not configured"}</span></div>
+            <div class="caller-block"><span class="caller-avatar">${uiIcon("phone")}</span><h2>Your pension guide</h2><p>English · <span lang="hi">हिंदी</span> · Hinglish</p></div>
+            <div class="transcript-heading"><strong>Your conversation</strong><span id="voice-status" role="status">${browserReady ? "Microphone off" : "Please use online guidance"}</span></div>
             <div class="transcript" id="transcript" aria-live="polite" aria-label="Call transcript">
               <div class="center" id="call-intro">
-                <p class="lead-light">Start a private browser call. Your final transcript turns and interpreted case facts will appear in the live operations panel.</p>
-                <button class="button button-primary" id="start-live-call" type="button" ${browserReady ? "" : "disabled"}>${browserReady ? "Start voice conversation" : "Vapi setup required"}</button>
+                <p>${browserReady ? "Your browser will ask to use your microphone. Read along here as you speak with the guide." : "Browser calling is being connected. You can get the same pension guidance by answering questions online."}</p>
+                ${browserReady ? `<button class="button button-primary" id="start-live-call" type="button">${uiIcon("mic")}Start voice conversation</button><a class="text-link" href="#/online">Prefer to type? Continue online</a>` : '<button class="button button-quiet" id="start-live-call" type="button" disabled>Browser calling unavailable</button><a class="text-link" href="#/online">Get help online</a>'}
               </div>
             </div>
           </div>
           <div class="phone-controls">
-            <button class="round-control" id="toggle-live-mute" type="button" aria-label="Mute microphone" aria-pressed="false" disabled>🎙</button>
+            <button class="round-control" id="toggle-live-mute" type="button" aria-label="Mute microphone" aria-pressed="false" disabled>${uiIcon("mic")}</button>
             <button class="round-control end" id="end-live-call" type="button" disabled>End call</button>
           </div>
+        </div>
+          <aside class="call-help">
+            <article class="summary-card"><h2>A little preparation helps</h2><ul class="check-list"><li>Find a quiet place to speak.</li><li>Think of when your pension last arrived.</li><li>Keep your private case code, if you already have one.</li></ul><a class="text-link" href="#/status">Continue an existing case</a></article>
+            <div class="callout danger"><strong>Keep your personal details safe</strong><p>Never say an Aadhaar number, bank or government OTP, PIN, password, CVV or full bank-account number. This is independent guidance, not a government service.</p></div>
+          </aside>
         </div>
       </div>
     </section>`;
@@ -271,7 +291,7 @@ function summaryView() {
           <div class="callout"><strong>Likely next step</strong><p>Confirm whether the annual life certificate was missed, then choose an eligible assisted submission route.</p></div>
           <div class="actions-row">
             <button class="button button-primary" id="confirm-summary" type="button">Yes, this is correct</button>
-            <button class="button button-quiet" id="edit-summary" type="button">Edit one detail</button>
+            <button class="button button-quiet" id="edit-summary" type="button">Get guidance for my situation</button>
           </div>
         </article>
         <aside class="summary-card">
@@ -285,7 +305,7 @@ function summaryView() {
             ${detailRow("Pramaan ID", caseData.pramaan)}
             ${detailRow("Language", caseData.language)}
           </dl>
-          <p class="tiny muted">This output is loaded from a hardcoded JSON fixture—not produced by speech recognition.</p>
+          <p class="tiny muted">This is an example summary using fictional details. Your own guidance is based on the answers you provide.</p>
         </aside>
       </div>
     </section>`;
@@ -317,13 +337,34 @@ const webQuestionOptions = {
   intake_confirmed: [["true", "Yes, this is correct"], ["false", "One detail is wrong"]],
 };
 
+function onlineQuestionMarkup(question) {
+  if (question?.id === "intake_confirmed" && webCase.currentFacts && Object.keys(webCase.currentFacts).length) {
+    const labels = {
+      caller_relation: "Who needs help", whatsapp_followup_consent: "WhatsApp follow-up",
+      pensioner_name: "Pensioner name", issue_type: "What happened", scheme_family: "Pension scheme",
+      former_employer: "Former employer", disbursement_channel: "Payment channel",
+      disbursing_institution: "Paying institution", last_credit_date: "Last pension payment",
+      pension_amount: "Monthly pension amount", life_certificate_status: "Life certificate",
+      life_certificate_method: "Submission method", life_certificate_receipt_available: "Certificate receipt",
+      changed_details: "Recent changes", state: "State or union territory", state_ut: "State or union territory",
+    };
+    const rows = Object.entries(webCase.currentFacts).filter(([field]) => field !== "intake_confirmed").map(([field, value]) => {
+      const readable = item => webQuestionOptions[field]?.find(([key]) => key === String(item))?.[1] || (typeof item === "boolean" ? (item ? "Yes" : "No") : String(item ?? "Not provided"));
+      const answer = Array.isArray(value) ? value.map(readable).join(", ") : readable(value);
+      return detailRow(escapeAttr(labels[field] || field.replaceAll("_", " ")), escapeAttr(answer));
+    }).join("");
+    return `<div class="question"><h2 id="online-question" tabindex="-1">Check your details</h2><p class="muted" id="online-question-hindi" lang="hi">कृपया जानकारी जाँचें। क्या सब सही है?</p><p class="muted">Review the answers below before we prepare your guidance. You can correct a detail if needed.</p></div><dl class="detail-list readback-details">${rows}</dl>`;
+  }
+  return `<div class="question"><h2 id="online-question" tabindex="-1">${escapeAttr(question?.en || "Your guidance is being prepared")}</h2><p class="muted" id="online-question-hindi" lang="hi-Latn">${escapeAttr(question?.hi || "")}</p></div>`;
+}
+
 function onlineView() {
-  if (!webCase) return `${pageHero("Continue online", "One question at a time.", "The same secure case can continue through web, phone or WhatsApp.")}
-    <section class="section section-tight"><div class="form-shell center"><span class="live-loader"></span><h2>Preparing your private case…</h2><p class="muted">No government, Aadhaar or bank system is being contacted.</p></div></section>`;
+  if (!webCase) return `${pageHero("Continue online", "One question at a time.", "Begin here, then continue with the same case by phone or WhatsApp whenever you need.")}
+    <section class="section section-tight"><div class="form-shell center" ${webCaseError ? "" : 'role="status" aria-live="polite" aria-busy="true"'}>${webCaseError ? `<div class="online-error" role="alert"><h2 id="online-question" tabindex="-1">We could not start your case.</h2><p>${escapeAttr(webCaseError)}</p><p class="muted">Please try again. You can also return to the help centre.</p></div><div class="actions-row"><button class="button button-primary" id="retry-web-case" type="button">Try again</button><a class="button button-quiet" href="#/help">Visit help centre</a></div>` : '<span class="live-loader" aria-hidden="true"></span><h2>Preparing your private case…</h2><p class="muted">This usually takes a moment. Keep this page open.</p>'}</div></section>`;
   if (webCase.complete && webCase.resolution) {
     const plan = webCase.resolution;
     return `${pageHero("Guidance prepared", `Your case is ${displayCaseCode(webCase)}.`, `Keep access code ${webCase.publicCode} to continue through phone, WhatsApp or this browser.`, '<span class="status-badge success">Guidance ready</span>')}
-      <section class="section section-tight"><div class="container summary-grid"><article class="summary-card"><span class="eyebrow">Likely explanation</span><h2>${escapeAttr(plan.likelyCause)}</h2><p class="muted">Confidence: ${escapeAttr(plan.confidence)} · ${plan.requiresHumanReview ? "Human review recommended" : "Matched to a deterministic guidance route"}</p><ol class="guidance-steps">${plan.nextSteps.map(step => `<li>${escapeAttr(step)}</li>`).join("")}</ol><div class="callout danger"><strong>Guidance, not a government decision</strong><p>${escapeAttr(plan.disclaimer)}</p></div></article><aside class="summary-card"><h2>Where to go</h2><dl class="detail-list">${detailRow("First contact", plan.primaryAuthority)}${detailRow("Escalation", plan.escalationAuthority)}${detailRow("Case reference", displayCaseCode(webCase))}${detailRow("Access code", webCase.publicCode)}</dl><h3>Helpful documents</h3><ul>${plan.documents.map(item => `<li>${escapeAttr(item)}</li>`).join("")}</ul><a class="button button-outline button-block" href="/admin">View in operations</a></aside></div></section>`;
+      <section class="section section-tight"><div class="container summary-grid"><article class="summary-card"><span class="eyebrow">Likely explanation</span><h2>${escapeAttr(plan.likelyCause)}</h2><p class="muted">Confidence: ${escapeAttr(plan.confidence)} · ${plan.requiresHumanReview ? "Human review recommended" : "Based on the details you confirmed"}</p><ol class="guidance-steps">${plan.nextSteps.map(step => `<li>${escapeAttr(step)}</li>`).join("")}</ol><div class="callout danger"><strong>Guidance, not a government decision</strong><p>${escapeAttr(plan.disclaimer)}</p></div></article><aside class="summary-card"><h2>Where to go</h2><dl class="detail-list">${detailRow("First contact", plan.primaryAuthority)}${detailRow("Escalation", plan.escalationAuthority)}${detailRow("Case reference", displayCaseCode(webCase))}${detailRow("Access code", webCase.publicCode)}</dl><h3>Helpful documents</h3><ul>${plan.documents.map(item => `<li>${escapeAttr(item)}</li>`).join("")}</ul><button class="button button-outline button-block" type="button" onclick="window.print()">Print your guidance</button><a class="text-link" href="#/status">Continue this case later</a></aside></div></section>`;
   }
   const question = webCase.nextQuestion;
   const options = webQuestionOptions[question?.id] || [];
@@ -333,16 +374,18 @@ function onlineView() {
     ["disbursing_institution", "Paying institution"], ["last_credit_date", "Last payment"],
     ["pension_amount", "Monthly amount"], ["life_certificate_status", "Life certificate"], ["changed_details", "Changed details"],
   ];
-  if (webCase.awaitingCorrection) return `${pageHero("Correct one detail", "Which answer should we change?", "The previous value stays in the audit history and the corrected value becomes current.", `<span class="status-badge neutral">${escapeAttr(displayCaseCode(webCase))}</span>`)}
-    <section class="section section-tight"><form class="form-shell" id="web-correction-form"><label for="web-correction-field"><strong>Detail to correct</strong></label><select id="web-correction-field" class="answer-input" required><option value="">Choose one detail</option>${correctionOptions.map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}</select><label for="web-correction-answer"><strong>Correct answer</strong></label><textarea id="web-correction-answer" class="answer-input" rows="4" required placeholder="Enter only the corrected answer…"></textarea><button class="button button-primary" type="submit">Save correction</button><p class="admin-error" id="web-answer-error" role="alert"></p></form></section>`;
-  return `${pageHero("Continue online", "One question at a time.", "Your answer is stored in the same case engine used by phone and WhatsApp.", `<span class="status-badge neutral">${escapeAttr(displayCaseCode(webCase))}</span>`)}
+  if (webCase.awaitingCorrection) return `${pageHero("Correct one detail", "Which answer should we change?", "Choose the detail, then tell us the correct answer. We will update your case.", `<span class="status-badge neutral">${escapeAttr(displayCaseCode(webCase))}</span>`)}
+    <section class="section section-tight"><form class="form-shell" id="web-correction-form" aria-labelledby="online-question"><h2 id="online-question" tabindex="-1">Update an answer</h2><label for="web-correction-field"><strong>Detail to correct</strong></label><select id="web-correction-field" class="answer-input" required><option value="">Choose one detail</option>${correctionOptions.map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}</select><label for="web-correction-answer"><strong>Correct answer</strong></label><textarea id="web-correction-answer" class="answer-input" rows="4" required placeholder="Enter only the corrected answer…"></textarea><button class="button button-primary" type="submit">Save correction</button><p class="form-save-status sr-only" role="status" aria-live="polite"></p><p class="admin-error" id="web-answer-error" role="alert"></p></form></section>`;
+  const completeness = Math.min(100, Math.max(0, Number(webCase.completeness) || 0));
+  return `${pageHero("Continue online", "One question at a time.", "Answer in English or Hindi. Each answer helps us understand what happened and what to do next.", `<span class="status-badge neutral">${escapeAttr(displayCaseCode(webCase))}</span>`)}
     <section class="section section-tight">
-      <form class="form-shell" id="live-online-form">
-        <div class="web-case-progress"><span style="width:${webCase.completeness || 0}%"></span></div>
-        <p class="muted">${webCase.completeness || 0}% complete · Case ${escapeAttr(displayCaseCode(webCase))}</p>
-        <div class="question"><h2>${escapeAttr(question?.en || "Your guidance is being prepared")}</h2><p class="muted">${escapeAttr(question?.hi || "")}</p></div>
-        ${options.length ? `<div class="choice-grid">${options.map(([value, label]) => `<button class="choice web-answer-option" data-answer="${escapeAttr(value)}" type="button"><span class="choice-dot"></span><span>${escapeAttr(label)}</span></button>`).join("")}</div>` : `<label class="sr-only" for="web-raw-answer">Your answer</label><textarea id="web-raw-answer" class="answer-input" rows="4" required placeholder="Answer in your own words…"></textarea><button class="button button-primary" type="submit">Save and continue</button>`}
+      <form class="form-shell" id="live-online-form" aria-labelledby="online-question">
+        <div class="web-case-progress" role="progressbar" aria-label="Case details completed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${completeness}"><span style="width:${completeness}%"></span></div>
+        <p class="muted">${completeness}% complete · Case ${escapeAttr(displayCaseCode(webCase))}</p>
+        ${onlineQuestionMarkup(question)}
+        ${options.length ? `<p class="answer-hint muted">Choose one answer to continue.</p><div class="choice-grid" role="group" aria-labelledby="online-question" aria-describedby="online-question-hindi">${options.map(([value, label]) => `<button class="choice web-answer-option" data-answer="${escapeAttr(value)}" type="button"><span class="choice-dot" aria-hidden="true"></span><span>${escapeAttr(label)}</span></button>`).join("")}</div>` : `<label class="sr-only" for="web-raw-answer">Your answer</label><textarea id="web-raw-answer" class="answer-input" rows="4" required aria-labelledby="online-question" aria-describedby="online-question-hindi" placeholder="Answer in your own words…"></textarea><button class="button button-primary" type="submit">Save and continue</button>`}
         <div class="callout danger compact"><strong>Never enter a bank or government OTP, PIN, password, Aadhaar number or complete bank account number.</strong></div>
+        <p class="form-save-status sr-only" role="status" aria-live="polite"></p>
         <p class="admin-error" id="web-answer-error" role="alert"></p>
       </form>
     </section>`;
@@ -353,7 +396,7 @@ function documentsView() {
   return `${pageHero("Demo documents", "Share only what helps explain the pension record.", "Use the supplied synthetic files. Do not upload real identity or banking documents.", `<span class="status-badge neutral">${attachedCount} of 3 attached</span>`)}
     <section class="section section-tight">
       <div class="container">
-        <div class="callout danger"><strong>Do not upload real information.</strong><p>This deterministic prototype attaches bundled synthetic filenames only. It never reads a file from your device.</p></div>
+        <div class="callout danger"><strong>Do not upload real information.</strong><p>Only the supplied example files can be attached. No file is read from your device.</p></div>
         <div class="spacer-md"></div>
         <div class="upload-grid">
           ${uploadCard("ppo", "PPO first page", "Helps identify the pension reference and likely authority.", "kamla-devi-demo-ppo.pdf", false)}
@@ -378,7 +421,7 @@ function uploadCard(key, title, reason, filename, optional) {
 }
 
 function receivedView() {
-  return `${pageHero("Documents received", "We received two synthetic demonstration files.", "They are attached to demo code 260810. Nothing has been sent outside this browser.", '<span class="status-badge success">✓ Received</span>')}
+  return `${pageHero("Documents received", `We received ${Object.values(state.documents).filter(Boolean).length} demonstration files.`, "They are attached to demo code 260810. Nothing has been sent outside this browser.", '<span class="status-badge success">✓ Received</span>')}
     <section class="section section-tight">
       <div class="narrow">
         <article class="summary-card center">
@@ -392,7 +435,74 @@ function receivedView() {
     </section>`;
 }
 
+function requestedCaseCode() {
+  return new URLSearchParams((window.location.hash.split("?")[1] || "")).get("case") || "";
+}
+
+function readableCaseValue(field, value) {
+  const option = webQuestionOptions[field]?.find(([key]) => key === String(value));
+  if (option) return option[1];
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return String(value ?? "Not provided");
+}
+
+function caseStatus(record) {
+  if (record.complete || record.status === "guidance_prepared") return { label: "Guidance ready", className: "success" };
+  if ((record.completeness || 0) > 0) return { label: `${record.completeness}% complete`, className: "neutral" };
+  return { label: "Ready to begin", className: "neutral" };
+}
+
+function realCaseView(record) {
+  const facts = record.currentFacts || {};
+  const name = facts.pensioner_name || "Pensioner";
+  const status = caseStatus(record);
+  const plan = record.resolution;
+  const updated = record.updatedAt ? new Date(record.updatedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "Not available";
+  const factRows = [
+    ["Pensioner", name],
+    ["What happened", readableCaseValue("issue_type", facts.issue_type)],
+    ["Pension scheme", readableCaseValue("scheme_family", facts.scheme_family)],
+    ["Last pension payment", readableCaseValue("last_credit_date", facts.last_credit_date)],
+    ["Life certificate", readableCaseValue("life_certificate_status", facts.life_certificate_status)],
+    ["State", readableCaseValue("location_state", facts.location_state)],
+  ];
+  return `${pageHero("Case dashboard", `${escapeAttr(name)} · ${escapeAttr(displayCaseCode(record))}`, "A private, continuable view of this pension-guidance case.", `<span class="status-badge ${status.className}">${escapeAttr(status.label)}</span>`)}
+    <section class="section section-tight">
+      <div class="container case-layout real-case-dashboard">
+        <article class="summary-card">
+          <span class="eyebrow">Current next step</span>
+          <h2>${escapeAttr(plan?.nextSteps?.[0] || record.nextQuestion?.en || "Continue the guided intake")}</h2>
+          <div class="web-case-progress" role="progressbar" aria-label="Case details completed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Number(record.completeness) || 0}"><span style="width:${Number(record.completeness) || 0}%"></span></div>
+          <p class="muted">${Number(record.completeness) || 0}% complete · Last updated ${escapeAttr(updated)}</p>
+          ${plan ? `<div class="callout"><strong>${escapeAttr(plan.likelyCause)}</strong><p>${escapeAttr(plan.disclaimer)}</p></div><h3>Guidance steps</h3><ol class="guidance-steps">${plan.nextSteps.map(step => `<li>${escapeAttr(step)}</li>`).join("")}</ol>` : '<p>Continue the conversation so Pension Restart can prepare a guidance route from the details you confirm.</p>'}
+          <div class="actions-row"><a class="button button-primary" href="#/online">${record.complete ? "Review and update answers" : "Continue this case"}</a><button class="button button-quiet" type="button" onclick="window.print()">Print case dashboard</button></div>
+        </article>
+        <aside>
+          <article class="summary-card"><h2>Case details</h2><dl class="detail-list">${factRows.map(([label, value]) => detailRow(label, escapeAttr(value))).join("")}</dl></article>
+          <div class="spacer-sm"></div>
+          <article class="summary-card"><h2>Keep this reference</h2><p class="case-reference-large">${escapeAttr(displayCaseCode(record))}</p><p class="muted">Use this six-digit reference to continue by phone, WhatsApp or the website.</p>${plan ? `<dl class="detail-list">${detailRow("First contact", escapeAttr(plan.primaryAuthority))}${detailRow("Escalation", escapeAttr(plan.escalationAuthority))}</dl>` : ""}</article>
+          <div class="spacer-sm"></div>
+          <div class="callout danger"><strong>Private on this browser</strong><p>This dashboard contains only current case facts and guidance. Raw transcripts and internal audit history are not shown.</p></div>
+        </aside>
+      </div>
+    </section>`;
+}
+
 function caseView() {
+  const code = requestedCaseCode();
+  if (code) {
+    const compactCode = code.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const numericCode = /^PR\d{6}$/.test(compactCode) ? compactCode.slice(2) : compactCode;
+    const candidates = [publicCase, webCase].filter(Boolean);
+    const record = candidates.find(candidate => candidate.publicCode === numericCode || candidate.displayCode?.toUpperCase().replace(/[^A-Z0-9]/g, "") === compactCode || candidate.caseId === code);
+    if (record) return realCaseView(record);
+    if (publicCaseError) return `${pageHero("Case dashboard", "We could not open this case.", publicCaseError)}<section class="section section-tight"><div class="narrow"><a class="button button-primary" href="#/status">Enter the case code again</a></div></section>`;
+    return `${pageHero("Case dashboard", "Opening your private case…", "Checking this browser's access to the requested case.")}<section class="section section-tight"><div class="form-shell center" role="status" aria-live="polite" aria-busy="true"><span class="live-loader" aria-hidden="true"></span><p class="muted">Keep this page open.</p></div></section>`;
+  }
+  return demoCaseView();
+}
+
+function demoCaseView() {
   const docsDone = state.documentsSent;
   const reviewed = state.reviewShown;
   const protectedState = state.pensionProtected;
@@ -409,7 +519,7 @@ function caseView() {
             ${timelineItem("Assisted route recommended", reviewed ? "Bank, post office, CSC or doorstep route" : "Waiting for review", reviewed, reviewed)}
             ${timelineItem("Pension credit confirmed", protectedState ? "Synthetic outcome recorded" : "Not confirmed", protectedState, protectedState)}
           </div>
-          ${!docsDone ? '<a class="button button-primary" href="#/documents">Attach demo documents</a>' : !reviewed ? '<button class="button button-primary" id="show-review" type="button">Demo control: show review response</button>' : !protectedState ? '<button class="button button-primary" id="protect-pension" type="button">Demo control: show successful outcome</button>' : '<div class="callout success"><strong>Pension protected until November 2027</strong><p>This is a simulated future outcome—not a government or bank status.</p></div>'}
+          ${!docsDone ? '<a class="button button-primary" href="#/documents">Attach demo documents</a>' : !reviewed ? '<button class="button button-primary" id="show-review" type="button">Demo control: show review response</button>' : !protectedState ? '<button class="button button-primary" id="protect-pension" type="button">Demo control: show successful outcome</button>' : '<div class="callout success"><strong>Pension protected until November 2027</strong><p>This is a simulated future outcome-not a government or bank status.</p></div>'}
         </article>
         <aside>
           <article class="summary-card">
@@ -417,6 +527,7 @@ function caseView() {
             <dl class="detail-list">
               ${detailRow("PPO document", state.documents.ppo ? "Received" : "Not attached")}
               ${detailRow("Credit record", state.documents.statement ? "Received" : "Not attached")}
+              ${detailRow("Selected route", state.routeSelected || "Not yet selected")}
               ${detailRow("Pramaan ID", state.pramaanRecorded ? "DEMO-3105-8421" : "Not available")}
               ${detailRow("DLC accepted", protectedState ? "Mock accepted" : "Not confirmed")}
               ${detailRow("Pension credit", protectedState ? "User-confirmed demo" : "Not confirmed")}
@@ -461,17 +572,48 @@ function optionsView() {
 }
 
 function familyView() {
-  return `${pageHero("Family assistance", "Help without taking control away.", "Keep deadlines, documents, references and next actions together—with the pensioner's permission.", '<span class="status-badge neutral">Synthetic household</span>')}
+  const cases = familyCases || [];
+  const actionNeeded = cases.filter(record => !record.complete || record.resolution?.requiresHumanReview).length;
+  const guidanceReady = cases.filter(record => record.complete).length;
+  const caseCards = cases.map(record => {
+    const facts = record.currentFacts || {};
+    const name = facts.pensioner_name || "Pensioner";
+    const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("").toUpperCase() || "PR";
+    const status = caseStatus(record);
+    const nextAction = record.resolution?.nextSteps?.[0] || record.nextQuestion?.en || "Review the case details";
+    return `<article class="family-case-card">
+      <div class="family-case-top"><span class="person-avatar" aria-hidden="true">${escapeAttr(initials)}</span><div><span class="status-badge ${status.className}">${escapeAttr(status.label)}</span><h3>${escapeAttr(name)}</h3><p class="family-case-code">${escapeAttr(displayCaseCode(record))}</p></div></div>
+      <p><strong>Next action:</strong> ${escapeAttr(nextAction)}</p>
+      <a class="button button-outline button-block" href="#/case?case=${encodeURIComponent(record.publicCode)}">Open private case</a>
+    </article>`;
+  }).join("");
+  return `${pageHero("Family assistance", "Help without taking control away.", "Keep consented case references and next actions together on this browser.", '<span class="status-badge neutral">Private to this browser</span>')}
     <section class="section section-tight">
       <div class="container">
-        <div class="dashboard-header"><div><span class="eyebrow">Good morning, Arun</span><h2>Two people supported</h2></div><a class="button button-primary" href="#/online">Add demo record</a></div>
-        <div class="stats-grid"><div class="stat"><strong>2</strong><span>People supported</span></div><div class="stat"><strong>1</strong><span>Action required</span></div><div class="stat"><strong>1</strong><span>Pension protected</span></div><div class="stat"><strong>${Object.values(state.documents).filter(Boolean).length}</strong><span>Demo files attached</span></div></div>
-        <div class="card-grid two">
-          <article class="dashboard-card person-card"><span class="person-avatar">KD</span><div><span class="status-badge">Pension interrupted</span><h3>Kamla Devi</h3><p>Current action: ${state.reviewShown ? "Choose assisted life-certificate route" : "Attach and review demo documents"}</p></div><a class="button button-outline" href="#/case">Open case</a></article>
-          <article class="dashboard-card person-card"><span class="person-avatar">ML</span><div><span class="status-badge success">Pension protected</span><h3>Mohan Lal</h3><p>Life certificate accepted for the current period. Next expected action: October 2027.</p></div><button class="button button-quiet" type="button" data-toast="Protected record is ready.">View record</button></article>
+        <div class="dashboard-header"><div><span class="eyebrow">Consented case access</span><h2>${cases.length ? `${cases.length} ${cases.length === 1 ? "case" : "cases"} supported` : "Your family case dashboard"}</h2></div><a class="button button-primary" href="#/online">Get guidance online</a></div>
+        ${familyCases === null && !familyCasesError ? '<div class="form-shell center family-loading" role="status" aria-live="polite" aria-busy="true"><span class="live-loader" aria-hidden="true"></span><h3>Opening your private dashboard…</h3></div>' : `
+        <div class="stats-grid family-stats"><div class="stat"><strong>${cases.length}</strong><span>Cases linked</span></div><div class="stat"><strong>${actionNeeded}</strong><span>Need a next step</span></div><div class="stat"><strong>${guidanceReady}</strong><span>Guidance ready</span></div></div>
+        <div class="family-dashboard-layout">
+          <div class="family-case-list">
+            ${familyCasesError ? `<div class="callout danger"><strong>We could not load the private dashboard.</strong><p>${escapeAttr(familyCasesError)}</p><button class="button button-outline" id="retry-family-cases" type="button">Try again</button></div>` : caseCards || '<article class="family-empty"><span class="icon-box teal">'+uiIcon("people")+'</span><h3>No family cases linked yet</h3><p>Ask the pensioner for their six-digit Pension Restart case reference, then confirm their permission before adding it here.</p></article>'}
+          </div>
+          <form class="family-link-card" id="family-link-form">
+            <span class="eyebrow">Add an existing case</span>
+            <h3>Link with permission</h3>
+            <p>Enter the continuable reference shared by the pensioner.</p>
+            <label for="family-case-code"><strong>Six-digit case code</strong></label>
+            <input class="answer-input status-input" id="family-case-code" name="case-code" placeholder="For example, PR-123456" maxlength="9" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" required />
+            <label for="family-relationship"><strong>Your relationship</strong></label>
+            <select class="answer-input" id="family-relationship" name="relationship" required>
+              <option value="">Choose one</option><option value="spouse">Spouse</option><option value="child">Child</option><option value="grandchild">Grandchild</option><option value="relative">Other relative</option><option value="helper">Trusted helper</option><option value="self">The case is mine</option>
+            </select>
+            <label class="consent-check" for="family-consent"><input id="family-consent" name="consent" type="checkbox" required /><span>I confirm I have the pensioner's permission to view and continue this case.</span></label>
+            <button class="button button-primary button-block" id="family-link-case" type="submit">Link this case</button>
+            <p class="admin-error" id="family-link-error" role="alert">${escapeAttr(familyCasesError && cases.length ? familyCasesError : "")}</p>
+          </form>
         </div>
-        <div class="spacer-md"></div>
-        <div class="callout"><strong>The pensioner remains in control.</strong><p>A helper can prepare information and arrange assistance, but official authentication and personal declarations stay with the pensioner.</p></div>
+        `}
+        <div class="spacer-md"></div><div class="callout"><strong>The pensioner remains in control.</strong><p>Linking allows this browser to view current case facts and continue the guidance. It does not authorise official authentication, personal declarations or access to raw transcripts. Clearing this browser's cookies removes the browser-bound access.</p></div>
       </div>
     </section>`;
 }
@@ -480,20 +622,23 @@ function statusView() {
   const caseFromLink = new URLSearchParams((window.location.hash.split("?")[1] || "")).get("case") || "";
   return `${pageHero("Continue a case", "One reference. One understandable result.", "Enter the private case code given to you by phone, WhatsApp or this website.")}
     <section class="section section-tight">
-      <div class="form-shell">
+      <form class="form-shell" id="status-form">
         <label for="status-id"><strong>Six-digit Pension Restart code</strong></label>
-        <input id="status-id" value="${escapeAttr(caseFromLink)}" placeholder="PR-123456 or 123456" maxlength="9" autocomplete="one-time-code" style="width:100%;margin:12px 0 18px;padding:16px;border:2px solid var(--line);border-radius:14px" />
-        <button class="button button-primary" id="check-status" type="button">Connect this case</button>
-        <div id="status-result"></div>
-      </div>
+        <p class="muted status-hint" id="status-hint">You can enter the six digits on their own, or include PR- at the beginning.</p>
+        <input class="answer-input status-input" id="status-id" name="case-code" value="${escapeAttr(caseFromLink)}" placeholder="For example, PR-123456" maxlength="9" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" required aria-describedby="status-hint" />
+        <button class="button button-primary" id="check-status" type="submit">Connect this case</button>
+        <div id="status-result" role="status" aria-live="polite" aria-atomic="true"></div>
+      </form>
     </section>`;
 }
 
 function helpView() {
+  const phone = configuredPhone();
+  const phoneHref = phoneLink(phone);
   const faqs = [
     ["Can Pension Restart issue my life certificate?", "No. It explains available routes and helps you prepare. The official process must be completed through an eligible authority, bank, post office, centre, mobile application or available doorstep channel."],
-    ["Is the displayed phone number active?", runtimeConfig.providers?.vapiPhone ? "Yes. It is the Vapi number connected to the live Pension Restart voice assistant. It is a US number, so international charges may apply." : "Not yet. The number will appear as soon as the Vapi telephone setup is connected. You can use the online intake now."],
-    ["Is the voice assistant using AI?", "Yes. Vapi handles the live conversation, while a constrained interpretation step proposes facts from each answer. Server-side validation and deterministic rules—not the voice model—control case updates and final guidance."],
+    ["Is the displayed phone number active?", phoneHref ? `Yes. Call <a class="inline-phone-link" href="${phoneHref}">${escapeAttr(phone)}</a> to reach the Pension Restart AI guide. International calling charges may apply.` : "The phone line is awaiting its Vapi number. You can get guidance through browser voice or online now."],
+    ["Is the voice assistant using AI?", "Yes. An AI guide helps you explain the problem. You can check and correct important details before receiving guidance. The service applies defined pension guidance rules; the relevant authority makes the official decision."],
     ["Are my documents sent anywhere?", "No. The prototype attaches only supplied synthetic filenames and does not read or transmit a file from your device."],
     ["Does documents received mean pension will restart?", "No. It only means the demonstration files were attached. The authority must accept the life certificate and the paying institution must credit pension."],
     ["Can a family member complete everything?", "A trusted person can prepare information and help operate eligible tools, but the pensioner must complete required authentication or personal declarations."],
@@ -501,24 +646,28 @@ function helpView() {
     ["What should I never share on a call?", "Never share an OTP, UPI or ATM PIN, CVV, remote-access code or bank password."],
   ];
   return `${pageHero("Pension help centre", "Pension help, written in plain language.", "Understand the references, submission choices and safety boundaries before taking the next step.")}
-    <section class="section section-tight"><div class="narrow faq-list">${faqs.map(([q,a]) => `<article class="faq-item"><button class="faq-question" type="button" aria-expanded="false"><span>${q}</span><span>+</span></button><div class="faq-answer"><p>${a}</p></div></article>`).join("")}</div></section>`;
+    <section class="section section-tight"><div class="narrow faq-list">${faqs.map(([q,a], i) => `<article class="faq-item"><button class="faq-question" type="button" aria-expanded="false" aria-controls="faq-answer-${i}"><span>${q}</span><span>+</span></button><div class="faq-answer" id="faq-answer-${i}"><p>${a}</p></div></article>`).join("")}</div></section>`;
 }
 
 function aboutView() {
   return `${pageHero("About Pension Restart", "Clear about what works. Clear about its limits.", "Pension Restart reorganises the journey around the citizen's real sentence: “My pension stopped.”")}
     <section class="section section-tight">
       <div class="container disclosure-grid">
-        <article class="disclosure-card works"><h3>Working now</h3><ul><li>Live phone and browser voice agent</li><li>Hindi, English and Hinglish intake</li><li>Meta WhatsApp guided flow</li><li>Cross-channel case continuity</li><li>Online one-question form</li><li>Deterministic guidance engine</li><li>Live operations dashboard</li><li>Correction and audit history</li></ul></article>
-        <article class="disclosure-card mocked"><h3>Demonstration only</h3><ul><li>Document attachment and review states</li><li>Family dashboard examples</li><li>Government and bank connections</li><li>Official case submission</li><li>Pension resumption</li></ul></article>
+        <article class="disclosure-card works"><h3>Working now</h3><ul><li>Phone and browser voice guidance when connected</li><li>Hindi, English and Hinglish intake</li><li>WhatsApp guided flow when connected</li><li>Cross-channel case continuity</li><li>Online one-question form</li><li>User-facing case dashboard</li><li>Browser-bound consented family dashboard</li><li>Deterministic guidance engine</li><li>Live operations dashboard</li><li>Correction and audit history</li></ul></article>
+        <article class="disclosure-card mocked"><h3>Demonstration only</h3><ul><li>Document attachment and review states</li><li>Government and bank connections</li><li>Official case submission</li><li>Pension resumption</li></ul></article>
         <article class="disclosure-card future"><h3>Production safeguards</h3><ul><li>Verified pension research catalogue</li><li>Role-based human review</li><li>Encrypted managed database</li><li>Consent and deletion controls</li><li>Approved authority integrations</li><li>Operational escalation policy</li></ul></article>
       </div>
     </section>
     <section class="section surface-white"><div class="container split-grid"><div><span class="eyebrow">Why it exists</span><h2>A real family experience became a simpler starting point.</h2><p class="lead">An elderly relative's pension stopped because nobody knew that her life certificate was due. Pension Restart asks what changes when the pensioner can begin with one understandable conversation.</p></div><article class="summary-card"><h3>Independence statement</h3><p>Pension Restart is not affiliated with, approved by or operated by Jeevan Pramaan, UIDAI, EPFO, a bank, a post office or a government department.</p><h3>How Codex contributed</h3><p>Codex supported architecture critique, pension-flow modelling, product-state design, copy, implementation, provider adapters, tests and documentation. Product direction and decisions were made by Yashdeep Jha.</p></article></div></section>`;
 }
 
-function render() {
+function render(options = {}) {
   stopCallPlayback();
+  syncRuntimeShell();
   const route = (window.location.hash || "#/").slice(1).split("?")[0];
+  const routeChanged = route !== renderedRoute;
+  const previousScroll = { left: window.scrollX, top: window.scrollY };
+  const focusedId = document.activeElement?.id;
   const views = {
     "/": homeView,
     "/call": callView,
@@ -533,10 +682,40 @@ function render() {
     "/help": helpView,
     "/about": aboutView,
   };
+  const titles = {
+    "/": "One call. Clear guidance.", "/call": "Talk to a pension guide",
+    "/summary": "Review your summary", "/online": "Online pension guidance",
+    "/documents": "Demonstration documents", "/received": "Documents received",
+    "/case": "Case record", "/options": "Life certificate options",
+    "/family": "Family assistance", "/status": "Continue your case",
+    "/help": "Pension help centre", "/about": "About Pension Restart",
+  };
+  renderedRoute = route;
+  app.dataset.route = route;
   app.innerHTML = (views[route] || homeView)();
+  document.title = `Pension Restart - ${titles[route] || titles["/"]}`;
+  document.querySelectorAll('.site-header a[href^="#/"]').forEach(link => {
+    const current = link.getAttribute("href") === `#${route}`;
+    if (current) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  });
   bindViewEvents(route);
-  window.scrollTo({ top: 0, behavior: "auto" });
-  app.focus({ preventScroll: true });
+  if (routeChanged) {
+    closeNavigation();
+    window.scrollTo({ top: 0, behavior: "instant" });
+    app.focus({ preventScroll: true });
+  } else {
+    window.scrollTo({ ...previousScroll, behavior: "instant" });
+    const focusTarget = options.focusQuestion
+      ? document.querySelector("#online-question") || document.querySelector(".page-hero h1")
+      : options.focusSelector
+        ? document.querySelector(options.focusSelector)
+        : focusedId ? document.getElementById(focusedId) : null;
+    if (focusTarget && !focusTarget.disabled) {
+      if (!focusTarget.matches("button, input, select, textarea, a, [tabindex]")) focusTarget.tabIndex = -1;
+      focusTarget.focus({ preventScroll: !options.focusQuestion });
+    }
+  }
 }
 
 function bindViewEvents(route) {
@@ -551,6 +730,10 @@ function bindViewEvents(route) {
 
   if (route === "/online") {
     initializeWebCase();
+    document.querySelector("#retry-web-case")?.addEventListener("click", () => {
+      webCaseError = "";
+      render();
+    });
     document.querySelector("#live-online-form")?.addEventListener("submit", event => {
       event.preventDefault();
       const answer = document.querySelector("#web-raw-answer")?.value.trim();
@@ -565,10 +748,22 @@ function bindViewEvents(route) {
     });
   }
 
+  if (route === "/family") {
+    initializeFamilyCases();
+    document.querySelector("#retry-family-cases")?.addEventListener("click", () => {
+      familyCasesError = "";
+      familyCases = null;
+      render();
+    });
+    document.querySelector("#family-link-form")?.addEventListener("submit", linkFamilyCase);
+  }
+
+  if (route === "/case" && requestedCaseCode()) initializePublicCase();
+
   document.querySelector("#confirm-summary")?.addEventListener("click", () => { setState({ summaryConfirmed: true }); navigate("/documents"); });
   document.querySelector("#edit-summary")?.addEventListener("click", () => navigate("/online"));
 
-  document.querySelectorAll(".choice[data-answer]").forEach(choice => choice.addEventListener("click", () => {
+  document.querySelectorAll(".choice[data-key][data-answer]").forEach(choice => choice.addEventListener("click", () => {
     state.formAnswers[choice.dataset.key] = choice.dataset.answer;
     saveState();
     render();
@@ -584,12 +779,12 @@ function bindViewEvents(route) {
     state.documents[button.dataset.document] = true;
     saveState();
     showToast("Synthetic demo file attached.");
-    render();
+    render({ focusSelector: '.attach-doc:not(:disabled), #send-documents:not(:disabled)' });
   }));
   document.querySelector("#send-documents")?.addEventListener("click", () => { setState({ documentsSent: true }); navigate("/received"); });
 
-  document.querySelector("#show-review")?.addEventListener("click", () => { setState({ reviewShown: true }); showToast("Simulated review response is ready."); render(); });
-  document.querySelector("#protect-pension")?.addEventListener("click", () => { setState({ pensionProtected: true }); showToast("Synthetic successful outcome recorded."); render(); });
+  document.querySelector("#show-review")?.addEventListener("click", () => { setState({ reviewShown: true }); showToast("Simulated review response is ready."); render({ focusSelector: "#protect-pension" }); });
+  document.querySelector("#protect-pension")?.addEventListener("click", () => { setState({ pensionProtected: true }); showToast("Synthetic successful outcome recorded."); render({ focusSelector: ".case-layout .callout.success" }); });
   document.querySelector("#record-pramaan")?.addEventListener("click", () => { setState({ pramaanRecorded: true }); showToast("Demo Pramaan ID recorded."); render(); });
   document.querySelector("#download-record")?.addEventListener("click", downloadRecord);
 
@@ -599,28 +794,57 @@ function bindViewEvents(route) {
     navigate("/case");
   }));
 
-  document.querySelector("#check-status")?.addEventListener("click", async () => {
+  document.querySelector("#status-form")?.addEventListener("submit", async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const button = form.querySelector("#check-status");
+    if (button.disabled) return;
     const id = document.querySelector("#status-id").value.trim();
     const result = document.querySelector("#status-result");
-    if (!id) return;
+    if (!id) {
+      result.textContent = "Enter the case code you were given to continue.";
+      form.querySelector("#status-id").focus();
+      return;
+    }
+    button.disabled = true;
+    button.textContent = "Connecting…";
+    form.setAttribute("aria-busy", "true");
     result.innerHTML = '<div class="spacer-md muted">Connecting securely…</div>';
     try {
       const response = await fetch("/api/cases/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ publicCode: id }) });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || "Case not found");
       webCase = body;
-      result.innerHTML = `<div class="spacer-md"></div><div class="callout success"><strong>Case ${escapeAttr(displayCaseCode(body))} connected.</strong><p>${body.complete ? "Its guidance plan is ready." : `${body.completeness || 0}% of the guidance intake is complete.`}</p><a class="text-link" href="#/online">Continue this case</a></div>`;
+      publicCase = body;
+      publicCaseError = "";
+      publicCaseRequestedCode = body.publicCode;
+      showToast(`Case ${displayCaseCode(body)} connected.`);
+      navigate(`/case?case=${encodeURIComponent(body.publicCode)}`);
     } catch (error) {
       result.innerHTML = `<div class="spacer-md"></div><div class="callout danger"><strong>We could not connect that case.</strong><p>${escapeAttr(error.message)}</p></div>`;
+    } finally {
+      button.disabled = false;
+      button.textContent = "Connect this case";
+      form.removeAttribute("aria-busy");
     }
   });
 
-  document.querySelectorAll(".faq-question").forEach(button => button.addEventListener("click", () => {
+  document.querySelectorAll(".faq-question").forEach((button, index) => {
     const item = button.closest(".faq-item");
-    item.classList.toggle("open");
-    button.setAttribute("aria-expanded", String(item.classList.contains("open")));
-    button.querySelector("span:last-child").textContent = item.classList.contains("open") ? "−" : "+";
-  }));
+    const panel = item.querySelector(".faq-answer");
+    button.id = `faq-question-${index}`;
+    panel.id = `faq-answer-${index}`;
+    button.setAttribute("aria-controls", panel.id);
+    panel.setAttribute("role", "region");
+    panel.setAttribute("aria-labelledby", button.id);
+    panel.hidden = !item.classList.contains("open");
+    button.addEventListener("click", () => {
+      const open = item.classList.toggle("open");
+      button.setAttribute("aria-expanded", String(open));
+      button.querySelector("span:last-child").textContent = open ? "−" : "+";
+      panel.hidden = !open;
+    });
+  });
 }
 
 function initializeLiveCall() {
@@ -632,8 +856,89 @@ function initializeLiveCall() {
   });
 }
 
+async function initializeFamilyCases() {
+  if (Array.isArray(familyCases) || familyCasesLoading || familyCasesError) return;
+  familyCasesLoading = true;
+  try {
+    const response = await fetch("/api/family/cases", { headers: { "Accept": "application/json" } });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || "Could not load the family dashboard");
+    familyCases = Array.isArray(body.cases) ? body.cases : [];
+  } catch (error) {
+    familyCasesError = error.message || "The private dashboard could not be loaded.";
+  } finally {
+    familyCasesLoading = false;
+    if ((window.location.hash || "#/family").startsWith("#/family")) render({ focusSelector: familyCasesError ? "#retry-family-cases" : ".family-dashboard-layout" });
+  }
+}
+
+async function linkFamilyCase(event) {
+  event.preventDefault();
+  if (familyCaseLinking) return;
+  const form = event.currentTarget;
+  const button = form.querySelector("#family-link-case");
+  const errorElement = form.querySelector("#family-link-error");
+  const publicCode = form.querySelector("#family-case-code")?.value.trim();
+  const relationship = form.querySelector("#family-relationship")?.value;
+  const consentConfirmed = Boolean(form.querySelector("#family-consent")?.checked);
+  if (!publicCode || !relationship || !consentConfirmed) {
+    if (errorElement) errorElement.textContent = "Enter the case code, choose your relationship and confirm the pensioner's permission.";
+    return;
+  }
+  familyCaseLinking = true;
+  button.disabled = true;
+  button.textContent = "Linking securely…";
+  form.setAttribute("aria-busy", "true");
+  if (errorElement) errorElement.textContent = "";
+  try {
+    const response = await fetch("/api/family/cases", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ publicCode, relationship, consentConfirmed }),
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || "The case could not be linked");
+    familyCases = [body.case, ...(familyCases || []).filter(record => record.caseId !== body.case.caseId)];
+    familyCasesError = "";
+    showToast(`Case ${displayCaseCode(body.case)} added to this browser.`);
+    render({ focusSelector: ".family-case-card a" });
+  } catch (error) {
+    if (errorElement) errorElement.textContent = error.message || "The case could not be linked.";
+  } finally {
+    familyCaseLinking = false;
+    if (button?.isConnected) {
+      button.disabled = false;
+      button.textContent = "Link this case";
+    }
+    if (form?.isConnected) form.removeAttribute("aria-busy");
+  }
+}
+
+async function initializePublicCase() {
+  const requested = requestedCaseCode().trim();
+  if (!requested || publicCaseLoading || (publicCaseRequestedCode === requested && (publicCase || publicCaseError))) return;
+  publicCaseLoading = true;
+  publicCaseError = "";
+  publicCase = null;
+  publicCaseRequestedCode = requested;
+  const compact = requested.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const lookup = /^PR\d{6}$/.test(compact) ? compact.slice(2) : compact;
+  try {
+    const response = await fetch(`/api/cases/${encodeURIComponent(lookup)}`, { headers: { "Accept": "application/json" } });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || "This case is not available to this browser");
+    publicCase = body;
+    webCase = body;
+  } catch (error) {
+    publicCaseError = error.message || "This private case could not be opened.";
+  } finally {
+    publicCaseLoading = false;
+    if ((window.location.hash || "#/case").startsWith("#/case") && requestedCaseCode().trim() === requested) render({ focusSelector: ".real-case-dashboard, .page-hero h1" });
+  }
+}
+
 async function initializeWebCase() {
-  if (webCase || webCaseLoading) return;
+  if (webCase || webCaseLoading || webCaseError) return;
   webCaseLoading = true;
   try {
     webCase = await fetch("/api/cases", {
@@ -645,19 +950,25 @@ async function initializeWebCase() {
       if (!response.ok) throw new Error(body.error || "Could not start the case");
       return body;
     });
-    if ((window.location.hash || "#/online").startsWith("#/online")) render();
   } catch (error) {
-    showToast(error.message);
+    webCaseError = error.message || "The connection was interrupted.";
   } finally {
     webCaseLoading = false;
+    if ((window.location.hash || "#/online").startsWith("#/online")) render({ focusQuestion: true });
   }
 }
 
 async function submitWebAnswer(rawAnswer, confirmed, correctionField = "") {
-  if (!webCase?.nextQuestion) return;
-  const form = document.querySelector("#live-online-form");
+  if (!webCase?.nextQuestion || webAnswerSubmitting) return;
+  webAnswerSubmitting = true;
+  const form = document.querySelector(correctionField ? "#web-correction-form" : "#live-online-form");
   form?.classList.add("is-submitting");
-  form?.querySelectorAll("button, textarea").forEach(element => { element.disabled = true; });
+  form?.setAttribute("aria-busy", "true");
+  form?.querySelectorAll("button, input, select, textarea").forEach(element => { element.disabled = true; });
+  const saveStatus = form?.querySelector(".form-save-status");
+  const errorElement = form?.querySelector("#web-answer-error");
+  if (saveStatus) saveStatus.textContent = "Saving your answer…";
+  if (errorElement) errorElement.textContent = "";
   try {
     const response = await fetch(`/api/cases/${encodeURIComponent(webCase.caseId)}/answers`, {
       method: "POST",
@@ -676,12 +987,15 @@ async function submitWebAnswer(rawAnswer, confirmed, correctionField = "") {
     if (!response.ok) throw new Error(result.error || "The answer could not be saved");
     webCase = { ...webCase, ...result, resolution: result.resolution || null };
     if (result.clarification) showToast("One detail needs clarification.");
-    render();
+    if ((window.location.hash || "#/online").startsWith("#/online")) render({ focusQuestion: true });
   } catch (error) {
-    const errorElement = document.querySelector("#web-answer-error");
     if (errorElement) errorElement.textContent = error.message;
+    if (saveStatus) saveStatus.textContent = "Your answer has not been saved. Please try again.";
+  } finally {
+    webAnswerSubmitting = false;
     form?.classList.remove("is-submitting");
-    form?.querySelectorAll("button, textarea").forEach(element => { element.disabled = false; });
+    form?.removeAttribute("aria-busy");
+    form?.querySelectorAll("button, input, select, textarea").forEach(element => { element.disabled = false; });
   }
 }
 
@@ -771,7 +1085,8 @@ function toggleLiveMute() {
   liveVoice.setMuted(liveMuted);
   const button = document.querySelector("#toggle-live-mute");
   if (button) {
-    button.textContent = liveMuted ? "🔇" : "🎙";
+    button.innerHTML = uiIcon("mic");
+    button.classList.toggle("is-muted", liveMuted);
     button.setAttribute("aria-pressed", String(liveMuted));
     button.setAttribute("aria-label", liveMuted ? "Unmute microphone" : "Mute microphone");
   }
@@ -793,7 +1108,7 @@ function completeLiveCall() {
   if (mute) mute.disabled = true;
   if (end) end.disabled = true;
   const transcript = document.querySelector("#transcript");
-  if (transcript && !transcript.querySelector(".call-complete-actions")) transcript.insertAdjacentHTML("beforeend", '<div class="center spacer-md call-complete-actions"><a class="button button-primary" href="#/status">Continue with a case ID</a><a class="button button-quiet" href="/admin">Open live operations</a></div>');
+  if (transcript && !transcript.querySelector(".call-complete-actions")) transcript.insertAdjacentHTML("beforeend", '<div class="center spacer-md call-complete-actions"><a class="button button-primary" href="#/status">Continue with a case ID</a><a class="button button-quiet" href="#/options">Explore life certificate options</a></div>');
 }
 
 function initializeRecordedCall() {
@@ -994,19 +1309,52 @@ function displayCaseCode(record) {
   return record?.displayCode || (record?.publicCode ? `PR-${record.publicCode}` : "PR-000000");
 }
 
+function applyTextSize(enabled) {
+  document.body.classList.toggle("large-text", enabled);
+  document.documentElement.style.fontSize = enabled ? "112.5%" : "";
+  const button = document.querySelector("#text-size");
+  button.setAttribute("aria-pressed", String(enabled));
+  button.setAttribute("aria-label", enabled ? "Use standard text size" : "Increase text size");
+  button.setAttribute("title", enabled ? "Use standard text size" : "Increase text size");
+  try { localStorage.setItem("pension-restart-large-text", String(enabled)); } catch { /* The preference still works when browser storage is unavailable. */ }
+}
+
+function closeNavigation(restoreFocus = false) {
+  const button = document.querySelector("#menu-button");
+  document.querySelector("#nav-links").classList.remove("open");
+  button.setAttribute("aria-expanded", "false");
+  const label = button.querySelector(".sr-only");
+  if (label) label.textContent = "Open menu";
+  if (restoreFocus) button.focus();
+}
+
+let savedLargeText = false;
+try { savedLargeText = localStorage.getItem("pension-restart-large-text") === "true"; } catch { /* Use the standard size when browser storage is unavailable. */ }
+applyTextSize(savedLargeText);
+
 window.addEventListener("hashchange", render);
 document.querySelector("#text-size").addEventListener("click", () => {
-  document.body.classList.toggle("large-text");
-  showToast(document.body.classList.contains("large-text") ? "Larger text enabled." : "Standard text size enabled.");
+  const enabled = !document.body.classList.contains("large-text");
+  applyTextSize(enabled);
+  showToast(enabled ? "Larger text enabled." : "Standard text size enabled.");
 });
 document.querySelector("#menu-button").addEventListener("click", event => {
   const nav = document.querySelector("#nav-links");
   const open = nav.classList.toggle("open");
   event.currentTarget.setAttribute("aria-expanded", String(open));
+  const label = event.currentTarget.querySelector(".sr-only");
+  if (label) label.textContent = open ? "Close menu" : "Open menu";
 });
-document.querySelector("#nav-links").addEventListener("click", () => {
-  document.querySelector("#nav-links").classList.remove("open");
-  document.querySelector("#menu-button").setAttribute("aria-expanded", "false");
+document.querySelector("#nav-links").addEventListener("click", event => {
+  if (event.target.closest("a")) closeNavigation();
+});
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && document.querySelector("#nav-links").classList.contains("open")) {
+    closeNavigation(true);
+  }
+});
+document.addEventListener("click", event => {
+  if (!event.target.closest("#nav-links, #menu-button")) closeNavigation();
 });
 document.querySelector("#reset-demo").addEventListener("click", () => {
   state = structuredClone(initialState);

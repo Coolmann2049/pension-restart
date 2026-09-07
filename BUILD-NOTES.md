@@ -1,4 +1,4 @@
-# Pension Restart — implementation notes
+# Pension Restart - implementation notes
 
 ## Completed product layers
 

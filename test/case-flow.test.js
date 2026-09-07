@@ -13,8 +13,8 @@ process.env.WHATSAPP_ACCESS_TEMPLATE_NAME = "verify_account_2";
 process.env.WHATSAPP_ACCESS_TEMPLATE_LANGUAGE = "en";
 delete process.env.OPENAI_API_KEY;
 
-const { connectConversationByCode, createOrResumeCase, submitAnswer } = await import("../src/case-service.js");
-const { beginNotification, commitFact, findCaseByIdentity, finishNotification, getCaseRecord, hydrateCase } = await import("../src/db.js");
+const { connectConversationByCode, connectSupporterByCode, createOrResumeCase, submitAnswer } = await import("../src/case-service.js");
+const { beginNotification, commitFact, findCaseByIdentity, finishNotification, getCaseRecord, hasSupportAccess, hydrateCase, listSupportedCases } = await import("../src/db.js");
 const { resolveGuidance } = await import("../src/guidance-engine.js");
 const { handleVapiWebhook } = await import("../src/vapi.js");
 const { buildCaseAccessTemplate, processWhatsAppPayload } = await import("../src/whatsapp.js");
@@ -79,6 +79,41 @@ test("accepts the branded PR-123456 form of a six-digit case code", () => {
     accessSubject: "+919500000001",
   });
   assert.equal(connected.case.id, target.case.id);
+});
+
+test("requires explicit pensioner permission before linking a family case", () => {
+  const target = createOrResumeCase({ channel: "voice", identityKey: "+919500000011", externalConversationId: "family-consent-source" });
+  assert.throws(() => connectSupporterByCode({
+    publicCode: target.case.publicCode,
+    supporterIdentityKey: "browser_family_without_consent",
+    relationship: "child",
+    consentConfirmed: false,
+  }), error => error.statusCode === 400 && /permission/i.test(error.message));
+  assert.equal(hasSupportAccess("browser_family_without_consent", target.case.id), false);
+});
+
+test("one private family dashboard can hold multiple consented cases", () => {
+  const first = createOrResumeCase({ channel: "voice", identityKey: "+919500000012", externalConversationId: "family-case-one" });
+  const second = createOrResumeCase({ channel: "voice", identityKey: "+919500000013", externalConversationId: "family-case-two" });
+  const supporterIdentityKey = "browser_family_multiple_cases";
+  connectSupporterByCode({
+    publicCode: `PR-${first.case.publicCode}`,
+    supporterIdentityKey,
+    relationship: "child",
+    consentConfirmed: true,
+    accessSubject: `${supporterIdentityKey}:one`,
+  });
+  connectSupporterByCode({
+    publicCode: second.case.publicCode,
+    supporterIdentityKey,
+    relationship: "grandchild",
+    consentConfirmed: true,
+    accessSubject: `${supporterIdentityKey}:two`,
+  });
+  const supportedCases = listSupportedCases(supporterIdentityKey);
+  assert.deepEqual(new Set(supportedCases.map(record => record.id)), new Set([first.case.id, second.case.id]));
+  assert.equal(hasSupportAccess(supporterIdentityKey, first.case.publicCode), true);
+  assert.equal(hasSupportAccess(supporterIdentityKey, second.case.id), true);
 });
 
 test("rate limits repeated invalid six-digit code attempts", () => {

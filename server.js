@@ -3,13 +3,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import { config, configurationStatus, productionWarnings } from "./src/config.js";
-import { findCaseByIdentity, hydrateCase, listCaseRecords, purgeExpiredCases } from "./src/db.js";
-import { connectConversationByCode, createOrResumeCase, submitAnswer } from "./src/case-service.js";
+import { findCaseByIdentity, hasSupportAccess, hydrateCase, listCaseRecords, listSupportedCases, purgeExpiredCases } from "./src/db.js";
+import { connectConversationByCode, connectSupporterByCode, createOrResumeCase, submitAnswer } from "./src/case-service.js";
 import { isAdmin, loginAdmin, logoutAdmin, requireAdmin } from "./src/admin-auth.js";
 import { subscribe, publish } from "./src/realtime.js";
 import { handleVapiWebhook } from "./src/vapi.js";
 import { processWhatsAppPayload, verifyWhatsAppSignature, whatsappVerification } from "./src/whatsapp.js";
 import { parseCookies } from "./src/util.js";
+import { nextQuestion } from "./src/questions.js";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -41,11 +42,31 @@ function browserIdentity(request, response) {
 function requireOwnedBrowserCase(request, response, next) {
   const identityKey = browserIdentity(request, response);
   const owned = findCaseByIdentity("web", identityKey);
-  if (!owned || (owned.id !== request.params.caseId && owned.publicCode !== request.params.caseId)) {
+  const ownsRequested = owned && (owned.id === request.params.caseId || owned.publicCode === request.params.caseId);
+  if (!ownsRequested && !hasSupportAccess(identityKey, request.params.caseId)) {
     return response.status(404).json({ error: "Case not found for this browser" });
   }
-  request.ownedCase = owned;
+  request.ownedCase = ownsRequested ? owned : null;
   return next();
+}
+
+function clientCase(record, upcoming = nextQuestion(record.facts)) {
+  const currentFacts = Object.fromEntries(
+    Object.entries(record.facts || {}).map(([field, fact]) => [field, fact.value]),
+  );
+  return {
+    caseId: record.id,
+    publicCode: record.publicCode,
+    displayCode: record.displayCode,
+    status: record.status,
+    completeness: record.completeness,
+    caseVersion: record.version,
+    complete: record.status === "guidance_prepared",
+    updatedAt: record.updatedAt,
+    currentFacts,
+    resolution: record.resolution,
+    nextQuestion: upcoming && { id: upcoming.id, en: upcoming.en, hi: upcoming.hi },
+  };
 }
 
 app.get("/health", (_request, response) => {
@@ -69,11 +90,7 @@ app.post("/api/cases", (request, response) => {
     externalConversationId: request.body?.conversationId || `web:${identityKey}`,
     language: request.body?.language || "",
   });
-  response.status(result.resumed ? 200 : 201).json({
-    caseId: result.case.id, publicCode: result.case.publicCode, displayCode: result.case.displayCode, caseVersion: result.case.version,
-    resumed: result.resumed, completeness: result.case.completeness, facts: result.case.facts,
-    nextQuestion: result.nextQuestion && { id: result.nextQuestion.id, en: result.nextQuestion.en, hi: result.nextQuestion.hi },
-  });
+  response.status(result.resumed ? 200 : 201).json({ ...clientCase(result.case, result.nextQuestion), resumed: result.resumed });
 });
 
 app.post("/api/cases/claim", (request, response, next) => {
@@ -84,12 +101,7 @@ app.post("/api/cases/claim", (request, response, next) => {
       publicCode: request.body?.publicCode, channel: "web", identityKey, conversationId: current.conversation.id,
       accessSubject: `${identityKey}:${request.ip}`,
     });
-    response.json({
-      caseId: result.case.id, publicCode: result.case.publicCode, displayCode: result.case.displayCode, caseVersion: result.case.version,
-      completeness: result.case.completeness, complete: result.case.status === "guidance_prepared",
-      resolution: result.case.resolution,
-      nextQuestion: result.nextQuestion && { id: result.nextQuestion.id, en: result.nextQuestion.en, hi: result.nextQuestion.hi },
-    });
+    response.json(clientCase(result.case, result.nextQuestion));
   } catch (error) { next(error); }
 });
 
@@ -114,7 +126,27 @@ app.post("/api/cases/:caseId/answers", requireOwnedBrowserCase, async (request, 
 app.get("/api/cases/:caseId", requireOwnedBrowserCase, (request, response) => {
   const record = hydrateCase(request.params.caseId);
   if (!record) return response.status(404).json({ error: "Case not found" });
-  return response.json(record);
+  return response.json(clientCase(record));
+});
+
+app.get("/api/family/cases", (request, response) => {
+  const identityKey = browserIdentity(request, response);
+  const cases = listSupportedCases(identityKey).map(record => clientCase(hydrateCase(record.id)));
+  response.json({ private: true, cases });
+});
+
+app.post("/api/family/cases", (request, response, next) => {
+  try {
+    const identityKey = browserIdentity(request, response);
+    const result = connectSupporterByCode({
+      publicCode: request.body?.publicCode,
+      supporterIdentityKey: identityKey,
+      relationship: request.body?.relationship || "family",
+      consentConfirmed: request.body?.consentConfirmed === true,
+      accessSubject: `${identityKey}:${request.ip}`,
+    });
+    response.status(201).json({ case: clientCase(result.case, result.nextQuestion) });
+  } catch (error) { next(error); }
 });
 
 app.post("/webhooks/vapi", handleVapiWebhook);
