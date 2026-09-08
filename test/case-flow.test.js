@@ -57,6 +57,12 @@ test("builds the verify_account_2 body with the six-digit case access code", () 
   assert.deepEqual(body.template.components[0].parameters.map(parameter => parameter.text), [
     "accessing", "Pension Restart", "your pension guidance case", "482731",
   ]);
+  assert.deepEqual(body.template.components[1], {
+    type: "button",
+    sub_type: "url",
+    index: "0",
+    parameters: [{ type: "text", text: "482731" }],
+  });
 });
 
 test("moves a new channel conversation onto an existing case code", () => {

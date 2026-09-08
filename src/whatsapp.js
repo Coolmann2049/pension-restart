@@ -68,15 +68,23 @@ export function buildCaseAccessTemplate(record) {
     template: {
       name: config.whatsapp.accessTemplateName,
       language: { code: config.whatsapp.accessTemplateLanguage },
-      components: [{
-        type: "body",
-        parameters: [
-          { type: "text", text: config.whatsapp.accessTemplateAction },
-          { type: "text", text: config.whatsapp.accessTemplateAccount },
-          { type: "text", text: config.whatsapp.accessTemplateLinkTarget },
-          { type: "text", text: record.publicCode },
-        ],
-      }],
+      components: [
+        {
+          type: "body",
+          parameters: [
+            { type: "text", text: config.whatsapp.accessTemplateAction },
+            { type: "text", text: config.whatsapp.accessTemplateAccount },
+            { type: "text", text: config.whatsapp.accessTemplateLinkTarget },
+            { type: "text", text: record.publicCode },
+          ],
+        },
+        {
+          type: "button",
+          sub_type: "url",
+          index: "0",
+          parameters: [{ type: "text", text: record.publicCode }],
+        },
+      ],
     },
   };
 }

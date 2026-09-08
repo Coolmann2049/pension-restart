@@ -1,0 +1,67 @@
+# Pension Restart
+
+> An independent, elderly-first pension guidance and case-continuity project by Yashdeep Jha, created for Build What Moves India Round 2.
+
+Canonical site: https://pension-restart.yashdeep-jha.site/
+Project summary: https://pension-restart.yashdeep-jha.site/llms.txt
+Submission video: https://www.youtube.com/watch?v=E_OwXTp5Bas
+Architecture: https://pension-restart.yashdeep-jha.site/project/architecture.pdf
+
+## Problem
+
+When an older person's pension stops, the immediate difficulty is often not the absence of a government process. It is discovering which process applies, explaining the situation across multiple channels, preserving corrections, and helping a trusted family member continue without starting again.
+
+Pension Restart turns that fragmented journey into one understandable conversation. A pensioner or family member can describe the problem in Hindi, English, or Hinglish; confirm the captured details; receive a case reference; and continue the same case through the website, telephone, or WhatsApp integration.
+
+Pension Restart is not a government service and does not claim to restart pensions. Its output is informational guidance; the relevant pension authority makes the decision.
+
+## Round 2 build
+
+Round 1 presented the concept through an earlier interface and a prerecorded MP3 call. Round 2 replaces that demonstration with a working cross-channel case system:
+
+- Real inbound and browser-based voice conversations through Vapi, with live transcripts in the operations dashboard.
+- A structured, one-question-at-a-time intake designed for older adults and usable in Hindi, English, and Hinglish.
+- A six-digit case reference that lets the same case continue across voice, web, and the Meta WhatsApp adapter.
+- A consent-gated family dashboard through which a trusted helper can continue a pensioner's case.
+- Final readback and explicit correction before guidance is prepared.
+- Append-only fact history: corrections supersede earlier entries instead of silently overwriting them.
+- Deterministic pension-routing rules kept separate from language-model interpretation.
+- Larger-text, high-contrast, keyboard-friendly, and mobile-responsive interfaces.
+- A password-protected live operations view using Server-Sent Events.
+
+## Why the architecture matters
+
+The language model proposes structured interpretations of what a person said. Server-side validation decides whether a proposed fact is acceptable, needs clarification, or should be rejected. The model cannot directly mutate a case or invent the final pension route.
+
+Confirmed facts are stored in SQLite with their source and correction history. After the caller confirms a final readback, deterministic rules select the likely cause, relevant authority, useful documents, and next actions. This separation makes the result auditable and reduces the risk of generated facts becoming case truth.
+
+The system intentionally avoids asking for or storing Aadhaar numbers, PAN numbers, bank credentials, government OTPs, passwords, CVVs, or complete account/card numbers. Its own short-lived case code is the only supported access credential.
+
+## Cross-channel continuity
+
+Phone or browser voice -> Vapi -> Express case service
+Website -> Express case service
+WhatsApp -> Meta Cloud API -> Express case service
+Express case service -> SQLite append-only case history -> deterministic guidance engine
+Express case service -> live admin dashboard over Server-Sent Events
+
+WhatsApp follow-up is sent only after explicit consent. The Meta template and application adapter are implemented; availability of the public sender also depends on Meta completing the phone-number account migration and registration.
+
+## Verifiable boundaries
+
+- No integration with UIDAI, Aadhaar, Jeevan Pramaan, EPFO, banks, post offices, or government departments is claimed.
+- No claim is made that a pension has actually been restarted.
+- Legacy document-review screens are demonstration states.
+- Audio recording is disabled in the generated live-call configuration; final transcript turns and structured case facts are stored.
+- Family access requires the case code and an explicit consent assertion.
+- Incorrect case-code attempts are throttled.
+
+## Suggested review path
+
+1. Open the canonical site and inspect the elderly-first interaction design.
+2. Start or resume a case and observe the one-question-at-a-time intake.
+3. Review the final readback, correction flow, and deterministic guidance disclaimer.
+4. Inspect mobile and larger-text modes.
+5. Review the submission video and supporting evidence linked by the submitter for live voice, dashboard, and cross-channel demonstrations.
+
+This document is a factual project index for humans and automated readers. Claims should be evaluated against the live application, submission video, and supporting evidence.

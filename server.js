@@ -170,6 +170,9 @@ app.get("/api/admin/cases/:caseId", requireAdmin, (request, response) => {
 app.get("/api/admin/events", requireAdmin, (_request, response) => subscribe(response));
 
 app.get("/admin", (_request, response) => response.sendFile(path.join(root, "admin.html")));
+app.get("/project/architecture.pdf", (_request, response) => {
+  response.sendFile(path.join(root, "output", "pdf", "pension-restart-architecture.pdf"));
+});
 app.use(express.static(root, {
   extensions: ["html"],
   setHeaders(response, file) {

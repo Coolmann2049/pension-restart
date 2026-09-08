@@ -28,14 +28,23 @@ STRICT CONVERSATION PROTOCOL
 - Never invent a case code, fact, authority or resolution.
 
 TOOL RESULTS
-- Tool calls can take a moment. Say a short natural holding phrase only when needed.
+- Tool calls are normally silent. Do not announce that an answer is being saved, noted or processed. When the tool returns, immediately ask its nextQuestion. Vapi handles delayed-status messages separately.
 - When complete=true, explain the returned deterministic resolution in simple language, say its disclaimer, read displayCode slowly as "P R" followed by each digit, and offer to repeat it. The numeric publicCode is what WhatsApp receives.
 - If a tool fails, apologize and ask the caller to try the website using the same case code if one is available.`;
+
+const quietToolMessages = [
+  { type: "request-start", blocking: false },
+  {
+    type: "request-response-delayed",
+    timingMilliseconds: 1500,
+    content: "Ek pal-thoda samay lag raha hai.",
+  },
+];
 
 const submitAnswerTool = {
   type: "function",
   async: false,
-  messages: [{ type: "request-start", content: "Ek pal, main aapki baat surakshit roop se note kar raha hoon.", blocking: false }],
+  messages: quietToolMessages,
   function: {
     name: "submit_answer",
     description: "Send every raw caller answer to the Pension Restart case engine. The returned nextQuestion is authoritative.",
@@ -60,6 +69,7 @@ const submitAnswerTool = {
 const getContextTool = {
   type: "function",
   async: false,
+  messages: quietToolMessages,
   function: {
     name: "get_case_context",
     description: "Retrieve the existing case state when a returning caller asks to continue.",
@@ -103,7 +113,7 @@ const payload = {
     loggingEnabled: true,
     transcriptPlan: { enabled: true, assistantName: "Pension guide", userName: "Caller" },
   },
-  metadata: { application: "pension-restart", configVersion: "2026-09-05.1" },
+  metadata: { application: "pension-restart", configVersion: "2026-09-07.1" },
 };
 
 // Remove undefined development annotations before sending.
